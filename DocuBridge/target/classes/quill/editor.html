@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>Quill Editor</title>
+    <script src="quill.js"></script>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            background: white;
+        }
+
+        #editor-container {
+            height: 750px;
+            background: white;
+        }
+
+        .ql-editor {
+            font-family: 'Calibri', 'Segoe UI', 'Arial', 'Helvetica', sans-serif;
+            font-size: 14px;
+            padding: 20px;
+            min-height: 750px;
+            outline: none;
+            line-height: 1.5;
+        }
+
+        .ql-editor p {
+            margin: 0 0 8px 0;
+        }
+    </style>
+</head>
+<body>
+<div id="editor-container"></div>
+
+<script>
+    var quill = new Quill('#editor-container', {
+        theme: null,
+        modules: {
+            toolbar: false
+        },
+        placeholder: null
+    });
+</script>
+</body>
+</html>

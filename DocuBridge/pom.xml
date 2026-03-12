@@ -76,7 +76,7 @@
                 <artifactId>javafx-maven-plugin</artifactId>
                 <version>0.0.8</version>
                 <configuration>
-                    <mainClass>Group12.MainApp</mainClass>
+                    <mainClass>Group12.Main</mainClass>  <!-- Changed from MainApp to Main -->
                     <options>
                         <option>--add-modules</option>
                         <option>javafx.controls,javafx.fxml,javafx.web</option>
