@@ -7,9 +7,11 @@ import javafx.stage.Stage;
 public class Main extends Application {
 
     @Override
-    public void start(Stage stage) throws Exception {
-        Document document = new Document("Untitled Document");
-        Scene scene = new Scene(document.getView(), 1200, 800);
+    public void start(Stage stage) {
+
+        Editor editor = new Editor("Untitled Document");
+
+        Scene scene = new Scene(editor.getView(), 1200, 800);
 
         stage.setTitle("DocuBridge");
         stage.setScene(scene);
