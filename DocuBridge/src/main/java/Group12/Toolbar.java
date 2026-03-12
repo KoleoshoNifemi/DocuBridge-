@@ -9,60 +9,39 @@ public class Toolbar {
     private double dpi;
     private VBox toolbarContainer;
 
-    private double readDPI(){
-        Screen s = Screen.getPrimary();
-        return s.getDpi();
-    }
-
     public Toolbar() {
         dpi = readDPI();
         createToolbar();
     }
 
-    private void createToolbar(){
+    private double readDPI() {
+        return Screen.getPrimary().getDpi();
+    }
 
+    private void createToolbar() {
         MenuBar menuBar = new MenuBar();
 
-        // File Menu
-        Menu file = new Menu("File");
-        file.getItems().addAll(
-                new MenuItem("New"),
-                new MenuItem("Open"),
-                new MenuItem("Save"),
-                new MenuItem("Save As")
+        // add all the menus
+        menuBar.getMenus().addAll(
+                createMenu("File", "New", "Open", "Save", "Save As"),
+                createMenu("Edit", "Undo", "Redo", "Find"),
+                createMenu("Insert", "Image", "Table"),
+                createMenu("Format", "Align Left", "Align Center", "Align Right")
         );
-
-        // Edit Menu
-        Menu edit = new Menu("Edit");
-        edit.getItems().addAll(
-                new MenuItem("Undo"),
-                new MenuItem("Redo"),
-                new MenuItem("Find")
-        );
-
-        // Insert Menu
-        Menu insert = new Menu("Insert");
-        insert.getItems().addAll(
-                new MenuItem("Image"),
-                new MenuItem("Table")
-        );
-
-        // Format menu
-        Menu format = new Menu("Format");
-
-        MenuItem alignLeft = new MenuItem("Align Left");
-        MenuItem alignCenter = new MenuItem("Align Center");
-        MenuItem alignRight = new MenuItem("Align Right");
-
-        format.getItems().addAll(alignLeft, alignCenter, alignRight);
-
-        // add menus to toolbar
-        menuBar.getMenus().addAll(file, edit, insert, format);
 
         toolbarContainer = new VBox(menuBar);
     }
 
-    public VBox getView(){
+    // create Menu with items
+    private Menu createMenu(String menuName, String... itemNames) {
+        Menu menu = new Menu(menuName);
+        for (String name : itemNames) {
+            menu.getItems().add(new MenuItem(name));
+        }
+        return menu;
+    }
+
+    public VBox getView() {
         return toolbarContainer;
     }
 }
