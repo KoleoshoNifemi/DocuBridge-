@@ -8,75 +8,70 @@ import javafx.scene.web.WebView;
 import javafx.scene.web.WebEngine;
 
 public class Editor {
-
     private String name;
     private WebView webView;
     private WebEngine quill;
     private ScrollPane scrollPane;
     private StackPane webViewContainer;
     private BorderPane mainLayout;
+    private Toolbar toolBar;
     private double dpi;
-
-    private Toolbar toolbar;   // toolbar
+    private ClipboardHandler clipboardHandler; // Reference to clipboard handler
 
     private double readDPI(){
-        Screen s = Screen.getPrimary();
-        return (s.getDpi());
+        return Screen.getPrimary().getDpi();
     }
 
-    private void initializeWebView(){
+    // Getting our WebView running with quillJS
+    private void initializeWebView() {
         webView = new WebView();
         quill = webView.getEngine();
         String quillJsPath = getClass().getResource("/quill/editor.html").toExternalForm();
         quill.load(quillJsPath);
 
+        // Initialize clipboard handler (handles all copy/cut/paste functionality)
+        clipboardHandler = new ClipboardHandler(webView);
+
         webView.setPrefHeight(800);
-        webView.setMaxWidth(8.5 * dpi);     // 8.5 inches width
+        webView.setMaxWidth(8.5 * dpi);     //8.5 inches width
         webView.setMinHeight(600);
     }
 
     private void StyleContainer(){
-
+        // Configuring the stackPane which holds webView
         webViewContainer = new StackPane();
-
-        webViewContainer.setStyle(
-                "-fx-background-color: #f3f3f3;" +
-                        "-fx-padding: 20px 0 0 0;"
-        );
-
+        webViewContainer.setStyle("-fx-background-color: rgb(204, 202, 202)" + "-fx-padding: 30px 0;");
         webViewContainer.setMaxWidth(Double.MAX_VALUE);
-        webViewContainer.setAlignment(javafx.geometry.Pos.TOP_CENTER);
-
+        webViewContainer.setStyle( "-fx-effect: dropshadow(gaussian, rgba(0,0,0,0.1), 10, 0, 0, 2);");
+        webViewContainer.setAlignment(javafx.geometry.Pos.CENTER);  //center our editing area
         webViewContainer.getChildren().add(webView);
+        webViewContainer.setFocusTraversable(true); //makes container able to receive events
 
+        // Configuring the ScrollPane() which contains the stackPane()
         scrollPane = new ScrollPane();
         scrollPane.setContent(webViewContainer);
         scrollPane.setFitToWidth(true);
         scrollPane.setFitToHeight(true);
-        scrollPane.setHbarPolicy(ScrollPane.ScrollBarPolicy.NEVER);
+        scrollPane.setHbarPolicy(ScrollPane.ScrollBarPolicy.NEVER);     //Never want horizontal scrolling
     }
 
+    // Defining where to place toolbar and editing area
     private void initializeLayout(){
-
         mainLayout = new BorderPane();
-
-        mainLayout.setTop(toolbar.getView()); // use toolbar created in constructor
+        mainLayout.setTop(toolBar.getView());
         mainLayout.setCenter(scrollPane);
     }
 
     public Editor(String name) {
-
         this.name = name;
         dpi = readDPI();
-
-        toolbar = new Toolbar();   // initialize toolbar
-
+        toolBar = new Toolbar();
         initializeWebView();
         StyleContainer();
         initializeLayout();
     }
 
-    //Getters & Setters
+    // Getters & Setters
     public BorderPane getView() {
         return mainLayout;
     }
@@ -87,5 +82,9 @@ public class Editor {
 
     public double getDPI(){
         return dpi;
+    }
+
+    public ClipboardHandler getClipboardHandler() {
+        return clipboardHandler;
     }
 }
