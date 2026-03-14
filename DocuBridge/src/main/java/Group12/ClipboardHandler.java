@@ -109,9 +109,9 @@ public class ClipboardHandler {
                                     "        if (range && range.length > 0) {" +
                                     "            var text = quill.getText(range.index, range.length);" +
                                     "            var html = quill.getSemanticHTML(range.index, range.length);" +
-                                    "            var callbackName = 'cutCallback_' + Date.now();" + // Create unique cutback name using sys time
+                                    "            var callbackName = 'cutCallback_' + Date.now();" + // Create unique callback name using sys time
                                     "            window[callbackName] = function() {" +             // Add new function to js window
-                                    "                quill.deleteText(range.index, range.length);" +    // Delete copied text
+                                    "                quill.deleteText(range.index, range.length, 'user');" +    // User indicates changes were local
                                     "                delete window[callbackName];" +                // Delete function after execution
                                     "            };" +
                                     "            javaClipboard.setClipboardText(text, html, callbackName);" +
@@ -132,17 +132,18 @@ public class ClipboardHandler {
                 .replace("\n", "\\n")
                 .replace("\r", "");
 
+
         if (isHtml) {
             quill.executeScript(
                     "var range = quill.getSelection(true);" +
                             "var index = range ? range.index : 0;" +    // Check if range has a value
-                            "quill.clipboard.dangerouslyPasteHTML(index, '" + content + "');"
+                            "quill.clipboard.dangerouslyPasteHTML(index, '" + content + "', 'user');"
             );
         } else {
             quill.executeScript(
                     "var range = quill.getSelection(true);" +
                             "var index = range ? range.index : 0;" +
-                            "quill.insertText(index, '" + content + "');" +
+                            "quill.insertText(index, '" + content + "', 'user');" +
                             "quill.setSelection(index + " + content.length() + ");" // Move caret to location after paste
             );
         }
