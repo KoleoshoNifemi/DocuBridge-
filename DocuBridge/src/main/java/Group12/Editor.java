@@ -1,5 +1,6 @@
 package Group12;
 
+import javafx.scene.input.KeyCode;
 import javafx.stage.Screen;
 import javafx.scene.control.ScrollPane;
 import javafx.scene.layout.BorderPane;
@@ -16,7 +17,7 @@ public class Editor {
     private BorderPane mainLayout;
     private Toolbar toolBar;
     private double dpi;
-    private ClipboardHandler clipboardHandler; // Reference to clipboard handler
+    private ClipboardHandler clipboardHandler; 
 
     private double readDPI(){
         return Screen.getPrimary().getDpi();
@@ -28,6 +29,7 @@ public class Editor {
         quill = webView.getEngine();
         String quillJsPath = getClass().getResource("/quill/editor.html").toExternalForm();
         quill.load(quillJsPath);
+        initializeShortcuts();
 
         // Initialize clipboard handler (handles all copy/cut/paste functionality)
         clipboardHandler = new ClipboardHandler(webView);
@@ -69,6 +71,33 @@ public class Editor {
         initializeWebView();
         StyleContainer();
         initializeLayout();
+    }
+
+    //Shortcut functions
+    private void undo(){
+        quill.executeScript("quill.history.undo();");
+    }
+
+    private void redo(){
+        quill.executeScript("quill.history.redo();");
+    }
+
+    private void initializeShortcuts(){
+        webView.setOnKeyPressed(event -> {
+            if (event.isControlDown() || event.isMetaDown()) {
+                if (event.getCode() == javafx.scene.input.KeyCode.Z) {
+                    if (event.isShiftDown()) {
+                        redo();
+                    } else {
+                        undo();
+                    }
+                    event.consume();    //Only want to consume undo/redo
+                } else if (event.getCode() == javafx.scene.input.KeyCode.Y) {
+                    redo();
+                    event.consume();    //only want to consume redo
+                }
+            }
+        });
     }
 
     // Getters & Setters
