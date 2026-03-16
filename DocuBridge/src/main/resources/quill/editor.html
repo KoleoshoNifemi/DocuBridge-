@@ -37,20 +37,10 @@
     var quill = new Quill('#editor-container', {
         theme: null,
         modules: {
-            toolbar: false,
-            history: {
-                delay: 25,
-                maxStack: 1000,
-                userOnly: true       //only track this user's changes (local changes)
-            }
+            toolbar: false
         },
         placeholder: null
     });
-
-    // ensure editor gets focus after load
-    setTimeout(function() {
-        quill.focus();
-    }, 200);
 </script>
 </body>
 </html>

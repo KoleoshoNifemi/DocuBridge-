@@ -17,7 +17,7 @@ public class Editor {
     private BorderPane mainLayout;
     private Toolbar toolBar;
     private double dpi;
-    private ClipboardHandler clipboardHandler; 
+    private ClipboardHandler clipboardHandler;
 
     private double readDPI(){
         return Screen.getPrimary().getDpi();
