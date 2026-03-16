@@ -50,7 +50,6 @@ public class Toolbar {
         font.setPrefWidth(100);
         font.setPromptText("Font");
 
-
         // Color data
         Color[] colors = {null, Color.YELLOW, Color.LIME, Color.CYAN, Color.MAGENTA, Color.BLUE,
                 Color.RED, Color.NAVY, Color.TEAL, Color.GREEN, Color.PURPLE,
@@ -79,6 +78,7 @@ public class Toolbar {
         toolbarContainer = new VBox(menuBar, formatToolbar);
     }
 
+    // create the color menu grid
     private MenuButton createColorMenu(String menuName, Color[] colors, String[] names, boolean isHighlight) {
         MenuButton colorMenu = new MenuButton(menuName);
         colorMenu.setStyle("-fx-font-size: 14;");
@@ -110,8 +110,7 @@ public class Toolbar {
         return colorMenu;
     }
 
-    private Button selectedColorButton;
-
+    // creates the color buttons
     private Button createColorButton(Color color, String colorName) {
         Rectangle colorRect = new Rectangle(30, 30);
         colorRect.setFill(color);
