@@ -47,7 +47,7 @@ public class Toolbar {
         // Font List
         ComboBox<String> font = new ComboBox<>();
         font.getItems().addAll("Calibri", "Segoe UI", "Arial", "Helvetica");
-        font.setPrefWidth(100);
+        font.setPrefWidth(80);
         font.setPromptText("Font");
 
         // Color data
@@ -64,8 +64,8 @@ public class Toolbar {
                 createButton("B", "-fx-font-weight: bold;"),
                 createButton("I", "-fx-font-style: italic;"),
                 createButton("U", "-fx-underline: true;"),
-                createButton("ₓ", "-fx-font-size: 14;"),
-                createButton("ˣ", "-fx-font-size: 14;"),
+                createButton("Aₓ", "-fx-font-size: 14;"),
+                createButton("Aˣ", "-fx-font-size: 14;"),
                 createSeparator(),
                 font,
                 fontSizeCombo,
