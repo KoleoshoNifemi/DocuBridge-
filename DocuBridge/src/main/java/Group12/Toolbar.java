@@ -3,7 +3,11 @@ package Group12;
 import javafx.stage.Screen;
 import javafx.scene.control.*;
 import javafx.scene.layout.VBox;
+import javafx.scene.layout.GridPane;
 import javafx.geometry.Orientation;
+import javafx.scene.control.Separator;
+import javafx.scene.paint.Color;
+import javafx.scene.shape.Rectangle;
 
 public class Toolbar {
 
@@ -21,13 +25,11 @@ public class Toolbar {
         menuBar.getMenus().addAll(
                 createMenu("File", new String[] {"New", "Open", "Save", "Save As"}),
                 createMenu("Edit", new String[]{"Undo", "Redo", "Find"}),
-                createMenu("Insert", new String[]{"Image", "Table"}),
+                createMenu("Insert", new String[]{"Image", "Table", "Link"}),
                 createMenu("Format", new String[]{"Align Left", "Align Center", "Align Right"})
         );
 
         ToolBar formatToolbar = new ToolBar();
-
-        Separator separator = new Separator(Orientation.VERTICAL);
 
         // font sizes list
         ComboBox<Double> fontSizeCombo = new ComboBox<>();
@@ -42,6 +44,20 @@ public class Toolbar {
         alignCombo.setPrefWidth(110);
         alignCombo.setPromptText("Alignment");
 
+        // Font List
+        ComboBox<String> font = new ComboBox<>();
+        font.getItems().addAll("Calibri", "Segoe UI", "Arial", "Helvetica");
+        font.setPrefWidth(100);
+        font.setPromptText("Font");
+
+
+        // Color data
+        Color[] colors = {null, Color.YELLOW, Color.LIME, Color.CYAN, Color.MAGENTA, Color.BLUE,
+                Color.RED, Color.NAVY, Color.TEAL, Color.GREEN, Color.PURPLE,
+                Color.MAROON, Color.GRAY, Color.SILVER, Color.BLACK};
+        String[] names = {"No Color", "Yellow", "Lime", "Cyan", "Magenta", "Blue",
+                "Red", "Navy", "Teal", "Green", "Purple", "Maroon", "Gray", "Silver", "Black"};
+
         // ToolBar buttons
         formatToolbar.getItems().addAll(
                 createButton("Undo", "-fx-font-size: 14;"),
@@ -49,12 +65,68 @@ public class Toolbar {
                 createButton("B", "-fx-font-weight: bold;"),
                 createButton("I", "-fx-font-style: italic;"),
                 createButton("U", "-fx-underline: true;"),
-                separator,
+                createButton("ₓ", "-fx-font-size: 14;"),
+                createButton("ˣ", "-fx-font-size: 14;"),
+                createSeparator(),
+                font,
                 fontSizeCombo,
-                alignCombo
+                alignCombo,
+                createColorMenu("Highlight", colors, names, true),
+                createColorMenu("Font Color", colors, names, false),
+                createSeparator()
         );
 
         toolbarContainer = new VBox(menuBar, formatToolbar);
+    }
+
+    private MenuButton createColorMenu(String menuName, Color[] colors, String[] names, boolean isHighlight) {
+        MenuButton colorMenu = new MenuButton(menuName);
+        colorMenu.setStyle("-fx-font-size: 14;");
+
+        GridPane colorGrid = new GridPane();
+        colorGrid.setHgap(5);
+        colorGrid.setVgap(5);
+        colorGrid.setStyle("-fx-padding: 10; -fx-background-color: white;");
+
+        int startIndex = isHighlight ? 0 : 1;  // Skip first (transparent) for font colors
+        int index = startIndex;
+        for (int row = 0; row < 3; row++) {
+            for (int col = 0; col < 5; col++) {
+                if (index < colors.length) {
+                    Color color = colors[index] == null ? Color.TRANSPARENT : colors[index];
+                    String colorName = names[index];
+
+                    Button colorButton = createColorButton(color, colorName);
+                    colorGrid.add(colorButton, col, row);
+                    index++;
+                }
+            }
+        }
+
+        CustomMenuItem colorMenuItem = new CustomMenuItem(colorGrid);
+        colorMenuItem.setHideOnClick(false);
+        colorMenu.getItems().add(colorMenuItem);
+
+        return colorMenu;
+    }
+
+    private Button selectedColorButton;
+
+    private Button createColorButton(Color color, String colorName) {
+        Rectangle colorRect = new Rectangle(30, 30);
+        colorRect.setFill(color);
+
+        Button colorButton = new Button();
+        colorButton.setGraphic(colorRect);
+        colorButton.setFocusTraversable(false);
+        colorButton.setStyle("-fx-padding: 2; -fx-focus-color: transparent; -fx-faint-focus-color: transparent;");
+        colorButton.setTooltip(new Tooltip(colorName));
+
+        return colorButton;
+    }
+
+    private Separator createSeparator() {
+        return new Separator(Orientation.VERTICAL);
     }
 
     // Create Menu with items
