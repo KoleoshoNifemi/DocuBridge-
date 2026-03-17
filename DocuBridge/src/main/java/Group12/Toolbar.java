@@ -1,5 +1,6 @@
 package Group12;
 
+import javafx.application.Platform;
 import javafx.stage.Screen;
 import javafx.scene.control.*;
 import javafx.scene.layout.VBox;
@@ -8,34 +9,26 @@ import javafx.geometry.Orientation;
 import javafx.scene.control.Separator;
 import javafx.scene.paint.Color;
 import javafx.scene.shape.Rectangle;
+
 import java.util.HashMap;
-import java.util.concurrent.Callable;
 import java.util.function.BiConsumer;
 
 public class Toolbar {
 
     private double dpi;
     private VBox toolbarContainer;
-    private HashMap<String, Runnable> voidFunctions;
+    private HashMap<String, Runnable> clipBoard;
     private HashMap<String, BiConsumer<String, String>> formats;
-    private HashMap<String, Callable<Object>> returnFunctions;
-    private Callable<Object> getTextProperties;
+    private Button undo;
+    private Button redo;
     private Button bold;
     private Button italic;
     private Button underline;
-    private Button strikethrough;
-    private Button  subscript;
-    private Button superscript;
-
 
 
 
     private double readDPI() {
         return Screen.getPrimary().getDpi();
-    }
-
-    private void displayTextProperties(){
-
     }
 
     private void createToolbar() {
@@ -51,6 +44,13 @@ public class Toolbar {
 
         ToolBar formatToolbar = new ToolBar();
 
+        // font sizes list
+        ComboBox<Integer> fontSizeCombo = new ComboBox<>();
+        fontSizeCombo.getItems().addAll(8, 9, 10, 11, 12, 14, 16, 18, 24, 30, 36, 48, 60, 72, 96);
+        fontSizeCombo.setEditable(true);
+        fontSizeCombo.setPrefWidth(92);
+        fontSizeCombo.setPromptText("Font Size");
+
         // alignment list
         ComboBox<String> alignCombo = new ComboBox<>();
         alignCombo.getItems().addAll("Align Left", "Align Center", "Align Right");
@@ -59,9 +59,8 @@ public class Toolbar {
 
         // Font List
         ComboBox<String> font = new ComboBox<>();
-        font.getItems().addAll("Arial", "Courier New", "Georgia", "Times New Roman");
-
-                font.setPrefWidth(100);
+        font.getItems().addAll("Calibri", "Segoe UI", "Arial", "Helvetica");
+        font.setPrefWidth(100);
         font.setPromptText("Font");
 
         // Color data
@@ -75,14 +74,14 @@ public class Toolbar {
         formatToolbar.getItems().addAll(
                 createButton("Undo", "-fx-font-size: 14;", "undo", null, null),
                 createButton("Redo", "-fx-font-size: 14;", "redo", null, null),
-                bold = (createButton("B", "-fx-font-weight: bold;", "format", "bold", "user")),
-                italic = (createButton("I", "-fx-font-style: italic;", "format", "italic", "user")),
-                underline = (createButton("U", "-fx-underline: true;", "format", "underline", "user")),
-                subscript = (createButton("Aₓ", "-fx-font-size: 14;", "applyScript", "sub", "user")),
-                superscript = (createButton("Aˣ", "-fx-font-size: 14;", "applyScript", "super", "user")),
+                createButton("B", "-fx-font-weight: bold;", "format", "bold", "user"),
+                createButton("I", "-fx-font-style: italic;", "format", "italic", "user"),
+                createButton("U", "-fx-underline: true;", "format", "underline", "user"),
+                createButton("Aₓ", "-fx-font-size: 14;", "applyScript", "sub", "user"),
+                createButton("Aˣ", "-fx-font-size: 14;", "applyScript", "super", "user"),
                 createSeparator(),
                 font,
-                createFontSizeOptions(),
+                fontSizeCombo,
                 alignCombo,
                 createColorMenu("Highlight", colors, names, true),
                 createColorMenu("Font Color", colors, names, false),
@@ -151,38 +150,6 @@ public class Toolbar {
         return menu;
     }
 
-    private ComboBox<Integer> createFontSizeOptions(){
-        ComboBox<Integer> fontSizeCombo = new ComboBox<>();
-        fontSizeCombo.getItems().addAll(8, 9, 10, 11, 12, 14, 16, 18, 24, 30, 36, 48, 60, 72);
-        fontSizeCombo.setEditable(true);
-        fontSizeCombo.setPrefWidth(92);
-        fontSizeCombo.setPromptText("Font Size");
-
-        fontSizeCombo.setOnAction(e -> {
-            Object value = fontSizeCombo.getValue();
-
-            Integer size = null;
-
-            if (value instanceof Integer) {
-                size = (Integer) value;
-            } else if (value instanceof String) {
-                try {
-                    size = Integer.parseInt(((String) value).trim());
-                } catch (NumberFormatException ex) {
-                    fontSizeCombo.getEditor().clear();
-                    return;
-                }
-            }
-
-            if (size != null) {
-                int px = (int) Math.round(size * 1.333);
-                fontSizeCombo.setValue(size); // normalize back to Integer
-                formats.get("setFontSize").accept(px + "px", "user");
-            }
-        });
-        return fontSizeCombo;
-    }
-
     // Create Button
     private Button createButton(String text, String style, String functionName, String param1, String param2) {
         Button button = new Button(text);
@@ -192,9 +159,9 @@ public class Toolbar {
     }
 
     private void setButtonActions(Button button, String functionName, String param1, String param2) {
-        if (voidFunctions.containsKey(functionName)) {
+        if (clipBoard.containsKey(functionName)) {
             button.setOnAction(event -> {
-                Runnable function = voidFunctions.get(functionName);
+                Runnable function = clipBoard.get(functionName);
                 function.run();
             });
         }else{
@@ -205,13 +172,10 @@ public class Toolbar {
         }
     }
 
-    public Toolbar(HashMap<String, Runnable> voidFunctions,
-                   HashMap<String, BiConsumer<String, String>> formats) {
+    public Toolbar(HashMap<String, Runnable> clipBoard, HashMap<String, BiConsumer<String, String>> formats) {
         dpi = readDPI();
-        this.voidFunctions = voidFunctions;
+        this.clipBoard = clipBoard;
         this.formats = formats;
-        this.returnFunctions = returnFunctions;
-        getTextProperties = returnFunctions.get("getFormatProperties");
         createToolbar();
     }
 
