@@ -5,54 +5,18 @@ import javafx.scene.web.WebView;
 import javafx.scene.input.Clipboard;
 import javafx.scene.input.ClipboardContent;
 import javafx.application.Platform;
-import javafx.concurrent.Worker;
 import netscape.javascript.JSObject;
 
 import java.io.File;
 
 
 // Handles all clipboard operations (copy, cut, paste) between Quill editor and system clipboard.
-// Uses JavaScript bridge for reliable clipboard access and prevents duplicate paste events.
+// Uses keyboard event listeners and JSObject for direct, reliable clipboard access.
 
 public class ClipboardHandler {
     private final WebView webView;
     private final WebEngine quill;
-    private long lastPasteTime = 0; // Guard against duplicate paste events
 
-
-    // Class to be given to JavaScript
-    public class ClipboardBridge {
-        public void pasteText(String text) {
-            long now = System.currentTimeMillis();
-            if (now - lastPasteTime < 500) return; // ignore duplicates
-            lastPasteTime = now;
-            Platform.runLater(() -> insertIntoQuill(text, false));
-        }
-
-        public void pasteHTML(String html) {
-            long now = System.currentTimeMillis();
-            if (now - lastPasteTime < 500) return;
-            lastPasteTime = now;
-            Platform.runLater(() -> insertIntoQuill(html, true));
-        }
-
-        public void setClipboardText(String text, String html, String callback) {
-            Platform.runLater(() -> {
-                Clipboard fxClipboard = Clipboard.getSystemClipboard();
-                ClipboardContent content = new ClipboardContent();
-                content.putString(text);
-                if (html != null && !html.isEmpty()) {
-                    content.putHtml(html);
-                }
-                fxClipboard.setContent(content);
-
-                // Execute callback if needed (for cut operation)
-                if (callback != null && !callback.isEmpty()) {
-                    quill.executeScript(callback + "();");
-                }
-            });
-        }
-    }
 
     public ClipboardHandler(WebView webView) {
         this.webView = webView;
@@ -67,109 +31,127 @@ public class ClipboardHandler {
         quill.setUserDataDirectory(new File(System.getProperty("java.io.tmpdir")));
     }
 
-    // Sets up the JavaScript bridge and clipboard event listeners
+    // Sets up the JavaScript bridge for clipboard operations
     private void setupJavaScriptBridge() {
         enableClipboard();
+        // Keyboard listeners are now handled in Editor.java initializeShortcuts()
+    }
 
-        quill.getLoadWorker().stateProperty().addListener((obs, oldState, newState) -> {
-            if (newState == Worker.State.SUCCEEDED) {       // Check for completion of page loading
-                Platform.runLater(() -> {                   //Ensures code runs on JavaFX thread
-                    JSObject window = (JSObject) quill.executeScript("window");  // Get the js window as a java object
+    // Handle Ctrl+C - Copy selected text to system clipboard
+    public void handleCopy() {
+        try {
+            // Get the selected text from Quill using direct executeScript
+            JSObject selection = (JSObject) quill.executeScript("quill.getSelection(true)");
+            
+            if (selection != null) {
+                Number index = (Number) selection.getMember("index");
+                Number length = (Number) selection.getMember("length");
+                
+                if (length != null && length.intValue() > 0) {
+                    // Get the text and HTML content
+                    String text = (String) quill.executeScript("quill.getText(" + index.intValue() + ", " + length.intValue() + ")");
+                    String html = (String) quill.executeScript("quill.getSemanticHTML(" + index.intValue() + ", " + length.intValue() + ")");
+                    
+                    // Set to system clipboard
+                    Clipboard clipboard = Clipboard.getSystemClipboard();
+                    ClipboardContent content = new ClipboardContent();
+                    content.putString(text);
+                    if (html != null && !html.isEmpty()) {
+                        content.putHtml(html);
+                    }
+                    clipboard.setContent(content);
+                }
+            }
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+    }
 
-                    // Add a new property to the JS window object, setting its value to a new instance of our ClipboardBridge class
-                    window.setMember("javaClipboard", new ClipboardBridge());
-
-                    // Adding clipboard event listeners on document
-                    // Capturing Phase of DOM: window → document → body → div → target
-                    // By using the capturing phase we can guarantee our listeners fire before any others
+    // Handle Ctrl+X - Cut selected text to system clipboard
+    public void handleCut() {
+        try {
+            // Get the selected text from Quill using direct executeScript
+            JSObject selection = (JSObject) quill.executeScript("quill.getSelection(true)");
+            
+            if (selection != null) {
+                Number index = (Number) selection.getMember("index");
+                Number length = (Number) selection.getMember("length");
+                
+                if (length != null && length.intValue() > 0) {
+                    // Get the text and HTML content
+                    String text = (String) quill.executeScript("quill.getText(" + index.intValue() + ", " + length.intValue() + ")");
+                    String html = (String) quill.executeScript("quill.getSemanticHTML(" + index.intValue() + ", " + length.intValue() + ")");
+                    
+                    // Set to system clipboard
+                    Clipboard clipboard = Clipboard.getSystemClipboard();
+                    ClipboardContent content = new ClipboardContent();
+                    content.putString(text);
+                    if (html != null && !html.isEmpty()) {
+                        content.putHtml(html);
+                    }
+                    clipboard.setContent(content);
+                    
+                    // Delete the text from editor
                     quill.executeScript(
-                            "if (!window._clipboardListenersAttached) {" +
-                                    "    window._clipboardListenersAttached = true;" +
-                                    "    document.addEventListener('paste', function(e) {" +        // Adding listener for pasting
-                                    "        if (!e.target.closest('.ql-editor')) return;" +        // Check if the event target is inside quill editor
-                                    "        e.preventDefault(); e.stopPropagation();" +            // Ensure our custom handler is the only one running
-                                    "        var text = e.clipboardData.getData('text/plain');" +   // Get plain text from clipboard
-                                    "        var html = e.clipboardData.getData('text/html');" +    // Get formatted text from clipboard
-                                    "        if (html) javaClipboard.pasteHTML(html); else if (text) javaClipboard.pasteText(text);" +
-                                    "    }, true);" +                                               // True param indicates use in capturing phase
-                                    "    document.addEventListener('copy', function(e) {" +         // Add listener for copying
-                                    "        if (!e.target.closest('.ql-editor')) return;" +
-                                    "        e.preventDefault(); e.stopPropagation();" +
-                                    "        var range = quill.getSelection(true);" +               // Get location of selected text
-                                    "        if (range && range.length > 0) {" +                    // Check if selection is valid
-                                    "            var text = quill.getText(range.index, range.length);" +    // Get plain text within selected range
-                                    "            var html = quill.getSemanticHTML(range.index, range.length);" +    // Get formatted text within selected range
-                                    "            javaClipboard.setClipboardText(text, html, null);" +   // Call given Java class and method
-                                    "        }" +
-                                    "    }, true);" +
-                                    "    document.addEventListener('cut', function(e) {" +          // Adding listener for cutting
-                                    "        if (!e.target.closest('.ql-editor')) return;" +
-                                    "        e.preventDefault(); e.stopPropagation();" +
-                                    "        var range = quill.getSelection(true);" +
-                                    "        if (range && range.length > 0) {" +
-                                    "            var text = quill.getText(range.index, range.length);" +
-                                    "            var html = quill.getSemanticHTML(range.index, range.length);" +
-                                    "            var callbackName = 'cutCallback_' + Date.now();" + // Create unique callback name using sys time
-                                    "            window[callbackName] = function() {" +             // Add new function to js window
-                                    "                quill.deleteText(range.index, range.length, 'user');" +    // User indicates changes were local
-                                    "                delete window[callbackName];" +                // Delete function after execution
-                                    "            };" +
-                                    "            javaClipboard.setClipboardText(text, html, callbackName);" +
-                                    "        }" +
-                                    "    }, true);" +
-                                    "}"
+                            "quill.history.cutoff();" +
+                            "quill.deleteText(" + index.intValue() + ", " + length.intValue() + ", 'user');" +
+                            "quill.history.cutoff();"
                     );
-                });
+                }
+            }
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+    }
+
+    // Handle Ctrl+V - Paste from system clipboard into Quill
+    public void handlePaste() {
+        Platform.runLater(() -> {
+            try {
+                Clipboard clipboard = Clipboard.getSystemClipboard();
+                
+                // Try to get HTML first, fall back to plain text
+                String content = null;
+                boolean isHtml = false;
+                
+                if (clipboard.hasHtml()) {
+                    content = clipboard.getHtml();
+                    isHtml = true;
+                } else if (clipboard.hasString()) {
+                    content = clipboard.getString();
+                    isHtml = false;
+                } else {
+                    return;
+                }
+                
+                if (content == null || content.isEmpty()) {
+                    return;
+                }
+                
+                // Store the content and HTML flag in the window object
+                JSObject window = (JSObject) quill.executeScript("window");
+                window.setMember("_pasteContent", content);
+                window.setMember("_pasteIsHtml", isHtml);
+                
+                // Execute JavaScript that uses the content directly
+                String script = "quill.history.cutoff();" +
+                        "var selection = quill.getSelection(true);" +
+                        "var index = selection ? selection.index : 0;" +
+                        "if (window._pasteIsHtml) {" +
+                        "    quill.clipboard.dangerouslyPasteHTML(index, window._pasteContent, 'user');" +
+                        "} else {" +
+                        "    quill.insertText(index, window._pasteContent, 'user');" +
+                        "    quill.setSelection(index + window._pasteContent.length);" +
+                        "}" +
+                        "quill.history.cutoff();" +
+                        "delete window._pasteContent;" +
+                        "delete window._pasteIsHtml;";
+                
+                quill.executeScript(script);
+                
+            } catch (Exception e) {
+                e.printStackTrace();
             }
         });
-    }
-
-    // Sets each keystroke as individual item on history stack + ensures format changes are separated
-    public void enableCharacterByCharacterUndo() {
-        quill.executeScript(
-                "if (!window._undoOverrideEnabled) {" +
-                        "   window._undoOverrideEnabled = true;" +
-
-                        // split typing operations
-                        "   quill.on('text-change', function(delta, oldDelta, source) {" +
-                        "       if (source === 'user') quill.history.cutoff();" +
-                        "   });" +
-
-                        // split formatting operations BEFORE they happen
-                        "   document.addEventListener('keydown', function(e) {" +
-                        "       if (e.ctrlKey && ['b','i','u'].includes(e.key.toLowerCase())) {" +
-                        "           quill.history.cutoff();" +
-                        "       }" +
-                        "   }, true);" +
-
-                        "}"
-        );
-    }
-
-    // Insert content into the Quill editor at the current cursor position
-    private void insertIntoQuill(String content, boolean isHtml) {
-        // Escape backslashes, quotes, and newlines to prevent JS syntax errors
-        content = content.replace("\\", "\\\\")
-                .replace("'", "\\'")
-                .replace("\n", "\\n")
-                .replace("\r", "");
-
-        quill.executeScript("quill.history.cutoff();"); // Ensure's paste is new operation on history stack
-        if (isHtml) {
-            quill.executeScript(
-                    "var range = quill.getSelection(true);" +
-                            "var index = range ? range.index : 0;" +    // Check if range has a value
-                            "quill.clipboard.dangerouslyPasteHTML(index, '" + content + "', 'user');"
-            );
-        } else {
-            quill.executeScript(
-                    "var range = quill.getSelection(true);" +
-                            "var index = range ? range.index : 0;" +
-                            "quill.insertText(index, '" + content + "', 'user');" +
-                            "quill.setSelection(index + " + content.length() + ");" // Moves caret to location after paste
-            );
-        }
-        quill.executeScript("quill.history.cutoff();"); // End paste operation on the stack
-        quill.executeScript("quill.focus();");  // Enable general use of quill again
     }
 }

@@ -6,6 +6,7 @@ import javafx.scene.input.KeyCode;
 import javafx.scene.input.KeyEvent;
 import javafx.stage.Screen;
 import javafx.scene.control.ScrollPane;
+import javafx.scene.control.TextInputDialog;
 import javafx.scene.layout.BorderPane;
 import javafx.scene.layout.StackPane;
 import javafx.scene.web.WebView;
@@ -95,18 +96,21 @@ public class Editor {
     }
 
     private void forceRepaint() {
-        // Use a tiny delay to ensure the 'format' operation is
-        // fully committed to the Quill history stack before we bounce it.
+        // Force a repaint by triggering a browser reflow without touching history
         PauseTransition delay = new PauseTransition(Duration.millis(50));
         delay.setOnFinished(e -> {
+            // Use CSS opacity toggle to force a repaint without modifying undo/redo history
             quill.executeScript(
-                    "if (quill.history.stack.undo.length > 0) {" +
-                            "    quill.history.undo();" +
-                            "    quill.history.redo();" +
-                            "}"
+                    "var editor = document.querySelector('.ql-editor');" +
+                    "if (editor) {" +
+                    "    editor.style.opacity = '0.99';" +
+                    "    setTimeout(function() {" +
+                    "        editor.style.opacity = '1';" +
+                    "    }, 1);" +
+                    "}"
             );
 
-            // Final JavaFX nudge: sub-pixel resize forces the window to redraw
+            // JavaFX-side repaint: sub-pixel resize forces the window to redraw
             double w = webView.getWidth();
             webView.setPrefWidth(w + 0.01);
             Platform.runLater(() -> webView.setPrefWidth(w));
@@ -141,7 +145,6 @@ public class Editor {
     private void fontSizeShortcut(String operand, String source){
         Platform.runLater(() -> {
             quill.executeScript("quill.focus();" +
-                            "quill.history.cutoff();" +
                             "var currentSize = quill.getFormat().size;" +
                             "if (!currentSize || !currentSize.endsWith('px')) {" +
                             "    currentSize = '16px';" +   // Equivalent to 12pt font
@@ -150,8 +153,7 @@ public class Editor {
                             "var ptSize = Math.round(pxSize / 1.333);" +
                             "var newSize = (ptSize " + operand + " 2);" +
                             "newSize = Math.round (newSize * 1.333) + 'px';" +
-                            "quill.format('size', newSize, '" + source + "');" +
-                            "quill.history.cutoff();"
+                            "quill.format('size', newSize, '" + source + "');"
             );
             forceRepaint();
         });
@@ -162,12 +164,9 @@ public class Editor {
             webView.requestFocus();
             quill.executeScript(
                     "quill.focus();" +
-                            "var currentScript = quill.getFormat().script;" +
-                            "var newValue = (currentScript === '" + scriptType + "') ? false : '" + scriptType + "';" +
-                            "quill.format('script', newValue, '" + source + "');" +
-                            "setTimeout(function() {" +
-                            "   quill.format('script', newValue, '" + source + "');" +
-                            "}, 50);"
+                    "var currentScript = quill.getFormat().script;" +
+                    "var newValue = (currentScript === '" + scriptType + "') ? false : '" + scriptType + "';" +
+                    "quill.format('script', newValue, '" + source + "');"
             );
             forceRepaint();
         });
@@ -177,18 +176,95 @@ public class Editor {
         Platform.runLater(() -> {
             quill.executeScript(
                     "quill.focus();" +
-                            "quill.history.cutoff();" +
-                            "quill.format('" + type + "', !quill.getFormat()." + type + ", '" + source + "');" +
-                            "quill.history.cutoff(); "
+                    "quill.format('" + type + "', !quill.getFormat()." + type + ", '" + source + "');"
             );
             forceRepaint();
         });
+    }
 
+    private void applyLink(String source) {
+        System.out.println("applyLink() called with source: " + source);
+        webView.requestFocus();
+        
+        // Get current selection and link state
+        JSObject selection = (JSObject) quill.executeScript("quill.getSelection(true)");
+        System.out.println("Selection object: " + selection);
+        
+        if (selection == null) {
+            System.out.println("No selection, returning");
+            // No selection, show dialog with empty input
+            promptForLink(0, 0, source);
+            return;
+        }
+        
+        Number indexNum = (Number) selection.getMember("index");
+        Number lengthNum = (Number) selection.getMember("length");
+        
+        int index = indexNum != null ? indexNum.intValue() : 0;
+        int length = lengthNum != null ? lengthNum.intValue() : 0;
+        
+        System.out.println("Selection: index=" + index + ", length=" + length);
+        
+        if (length == 0) {
+            System.out.println("No text selected, returning");
+            // No text selected
+            return;
+        }
+        
+        // Check if selected text already has a link
+        Object currentLink = quill.executeScript("quill.getFormat().link");
+        System.out.println("Current link: " + currentLink);
+        
+        // JavaScript undefined returns as string "undefined", check for that
+        if (currentLink != null && !"undefined".equals(currentLink.toString()) && !currentLink.toString().isEmpty()) {
+            System.out.println("Removing existing link");
+            // Remove existing link
+            Platform.runLater(() -> {
+                quill.executeScript(
+                        "quill.setSelection(" + index + ", " + length + ");" +
+                        "quill.format('link', false, '" + source + "');"
+                );
+                forceRepaint();
+            });
+        } else {
+            System.out.println("No link found, prompting for URL");
+            // Prompt user for URL
+            promptForLink(index, length, source);
+        }
+    }
+    
+    private void promptForLink(int index, int length, String source) {
+        System.out.println("promptForLink() called with index=" + index + ", length=" + length);
+        TextInputDialog dialog = new TextInputDialog("http://");
+        dialog.setTitle("Add Link");
+        dialog.setHeaderText("Enter the URL:");
+        dialog.setContentText("URL:");
+        dialog.setGraphic(null);  // Remove the question mark icon
+        
+        System.out.println("Showing dialog...");
+        java.util.Optional<String> result = dialog.showAndWait();
+        System.out.println("Dialog result: " + (result.isPresent() ? result.get() : "cancelled"));
+        
+        result.ifPresent(url -> {
+            System.out.println("URL entered: " + url);
+            if (!url.trim().isEmpty()) {
+                System.out.println("Applying link to selection");
+                Platform.runLater(() -> {
+                    // Ensure selection is still active and apply link
+                    quill.executeScript(
+                            "quill.setSelection(" + index + ", " + length + ");" +
+                            "quill.format('link', '" + url.replace("'", "\\'") + "', '" + source + "');"
+                    );
+                    forceRepaint();
+                });
+            }
+        });
     }
 
     private void initializeShortcuts(){
         webView.addEventFilter(KeyEvent.KEY_PRESSED, event -> {
             if (event.isControlDown() || event.isMetaDown()) {  //ctrl (windows), cmd (mac)
+                System.out.println("Ctrl key detected with: " + event.getCode());
                 switch (event.getCode()) {
                     case Z:
                         event.consume();    // Prevents event from being passed to quill
@@ -216,7 +292,20 @@ public class Editor {
                         break;
                     case K:
                         event.consume();
-                        format("link", "user");
+                        System.out.println("Ctrl+K pressed!");
+                        applyLink("user");
+                        break;
+                    case C:
+                        event.consume();
+                        clipboardHandler.handleCopy();
+                        break;
+                    case X:
+                        event.consume();
+                        clipboardHandler.handleCut();
+                        break;
+                    case V:
+                        event.consume();
+                        clipboardHandler.handlePaste();
                         break;
                     case EQUALS:
                         event.consume();
@@ -237,12 +326,9 @@ public class Editor {
 
     private void toolBarFontSize(String size, String source){
         Platform.runLater(() -> {
-            webView.getParent().requestFocus();
             webView.requestFocus();
             quill.executeScript("quill.focus();" +
-                    "quill.history.cutoff();" +
-                    "quill.format('size','" + size + "','" + source + "');" +
-                    "quill.history.cutoff();"
+                    "quill.format('size','" + size + "','" + source + "');"
             );
             forceRepaint();
         });
