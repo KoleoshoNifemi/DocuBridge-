@@ -67,7 +67,7 @@ public class ClipboardHandler {
         quill.setUserDataDirectory(new File(System.getProperty("java.io.tmpdir")));
     }
 
-    //Sets up the JavaScript bridge and clipboard event listeners
+    // Sets up the JavaScript bridge and clipboard event listeners
     private void setupJavaScriptBridge() {
         enableClipboard();
 
@@ -124,6 +124,28 @@ public class ClipboardHandler {
         });
     }
 
+    // Sets each keystroke as individual item on history stack + ensures format changes are separated
+    public void enableCharacterByCharacterUndo() {
+        quill.executeScript(
+                "if (!window._undoOverrideEnabled) {" +
+                        "   window._undoOverrideEnabled = true;" +
+
+                        // split typing operations
+                        "   quill.on('text-change', function(delta, oldDelta, source) {" +
+                        "       if (source === 'user') quill.history.cutoff();" +
+                        "   });" +
+
+                        // split formatting operations BEFORE they happen
+                        "   document.addEventListener('keydown', function(e) {" +
+                        "       if (e.ctrlKey && ['b','i','u'].includes(e.key.toLowerCase())) {" +
+                        "           quill.history.cutoff();" +
+                        "       }" +
+                        "   }, true);" +
+
+                        "}"
+        );
+    }
+
     // Insert content into the Quill editor at the current cursor position
     private void insertIntoQuill(String content, boolean isHtml) {
         // Escape backslashes, quotes, and newlines to prevent JS syntax errors
@@ -132,7 +154,7 @@ public class ClipboardHandler {
                 .replace("\n", "\\n")
                 .replace("\r", "");
 
-
+        quill.executeScript("quill.history.cutoff();"); // Ensure's paste is new operation on history stack
         if (isHtml) {
             quill.executeScript(
                     "var range = quill.getSelection(true);" +
@@ -144,9 +166,10 @@ public class ClipboardHandler {
                     "var range = quill.getSelection(true);" +
                             "var index = range ? range.index : 0;" +
                             "quill.insertText(index, '" + content + "', 'user');" +
-                            "quill.setSelection(index + " + content.length() + ");" // Move caret to location after paste
+                            "quill.setSelection(index + " + content.length() + ");" // Moves caret to location after paste
             );
         }
+        quill.executeScript("quill.history.cutoff();"); // End paste operation on the stack
         quill.executeScript("quill.focus();");  // Enable general use of quill again
     }
 }
