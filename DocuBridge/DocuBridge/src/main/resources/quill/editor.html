@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>Quill Editor</title>
+    <script src="quill.js"></script>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            background: white;
+        }
+
+        #editor-container {
+            height: 750px;
+            background: white;
+        }
+
+        .ql-editor {
+            font-family: 'Calibri', 'Segoe UI', 'Arial', 'Helvetica', sans-serif;
+            font-size: 14px;
+            padding: 20px;
+            min-height: 750px;
+            outline: none;
+            line-height: 1.5;
+        }
+
+        .ql-editor p {
+            margin: 0 0 8px 0;
+        }
+    </style>
+</head>
+<body>
+<div id="editor-container"></div>
+
+<script>
+    var quill = new Quill('#editor-container', {
+        theme: 'snow',
+        modules: {
+            toolbar: false,
+            keyboard: true,
+            history: {
+                delay: 1,
+                maxStack: 1000,
+                userOnly: true       //only track this user's changes (local changes)
+            }
+        },
+        placeholder: null
+    });
+
+    var Size = Quill.import('attributors/style/size');
+    Size.whitelist = [
+        '8px', '9px', '10px', '11px', '12px', '13px', '14px', '15px', '16px',
+        '17px', '18px', '19px', '20px', '21px', '22px', '23px', '24px', '25px',
+        '26px', '27px', '28px', '29px', '30px', '31px', '32px', '33px', '34px',
+        '35px', '36px', '37px', '38px', '39px', '40px', '41px', '42px', '43px',
+        '44px', '45px', '46px', '47px', '48px', '49px', '50px', '51px', '52px',
+        '53px', '54px', '55px', '56px', '57px', '58px', '59px', '60px', '61px',
+        '62px', '63px', '64px', '65px', '66px', '67px', '68px', '69px', '70px',
+        '71px', '72px'
+    ];
+    Quill.register(Size, true);
+
+    // ensure editor gets focus after load
+    setTimeout(function() {
+        quill.focus();
+    }, 200);
+</script>
+</body>
+</html>
