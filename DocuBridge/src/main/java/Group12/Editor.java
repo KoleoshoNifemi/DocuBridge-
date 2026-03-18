@@ -2,7 +2,6 @@ package Group12;
 
 import javafx.animation.PauseTransition;
 import javafx.application.Platform;
-import javafx.scene.input.KeyCode;
 import javafx.scene.input.KeyEvent;
 import javafx.stage.Screen;
 import javafx.scene.control.ScrollPane;
@@ -15,8 +14,6 @@ import javafx.util.Duration;
 import netscape.javascript.JSObject;
 
 import java.util.HashMap;
-import java.util.Objects;
-import java.util.concurrent.Callable;
 import java.util.function.BiConsumer;
 
 public class Editor {
@@ -99,7 +96,7 @@ public class Editor {
         // Force a repaint by triggering a browser reflow without touching history
         PauseTransition delay = new PauseTransition(Duration.millis(50));
         delay.setOnFinished(e -> {
-            // Use CSS opacity toggle to force a repaint without modifying undo/redo history
+            // Use CSS opacity toggle to force a repaint
             quill.executeScript(
                     "var editor = document.querySelector('.ql-editor');" +
                     "if (editor) {" +
@@ -183,15 +180,12 @@ public class Editor {
     }
 
     private void applyLink(String source) {
-        System.out.println("applyLink() called with source: " + source);
         webView.requestFocus();
         
         // Get current selection and link state
         JSObject selection = (JSObject) quill.executeScript("quill.getSelection(true)");
-        System.out.println("Selection object: " + selection);
-        
+
         if (selection == null) {
-            System.out.println("No selection, returning");
             // No selection, show dialog with empty input
             promptForLink(0, 0, source);
             return;
@@ -203,21 +197,16 @@ public class Editor {
         int index = indexNum != null ? indexNum.intValue() : 0;
         int length = lengthNum != null ? lengthNum.intValue() : 0;
         
-        System.out.println("Selection: index=" + index + ", length=" + length);
-        
         if (length == 0) {
-            System.out.println("No text selected, returning");
             // No text selected
             return;
         }
         
         // Check if selected text already has a link
         Object currentLink = quill.executeScript("quill.getFormat().link");
-        System.out.println("Current link: " + currentLink);
-        
+
         // JavaScript undefined returns as string "undefined", check for that
         if (currentLink != null && !"undefined".equals(currentLink.toString()) && !currentLink.toString().isEmpty()) {
-            System.out.println("Removing existing link");
             // Remove existing link
             Platform.runLater(() -> {
                 quill.executeScript(
@@ -227,28 +216,22 @@ public class Editor {
                 forceRepaint();
             });
         } else {
-            System.out.println("No link found, prompting for URL");
             // Prompt user for URL
             promptForLink(index, length, source);
         }
     }
     
     private void promptForLink(int index, int length, String source) {
-        System.out.println("promptForLink() called with index=" + index + ", length=" + length);
         TextInputDialog dialog = new TextInputDialog("http://");
         dialog.setTitle("Add Link");
         dialog.setHeaderText("Enter the URL:");
         dialog.setContentText("URL:");
         dialog.setGraphic(null);  // Remove the question mark icon
         
-        System.out.println("Showing dialog...");
         java.util.Optional<String> result = dialog.showAndWait();
-        System.out.println("Dialog result: " + (result.isPresent() ? result.get() : "cancelled"));
-        
+
         result.ifPresent(url -> {
-            System.out.println("URL entered: " + url);
             if (!url.trim().isEmpty()) {
-                System.out.println("Applying link to selection");
                 Platform.runLater(() -> {
                     // Ensure selection is still active and apply link
                     quill.executeScript(
@@ -261,10 +244,39 @@ public class Editor {
         });
     }
 
+    private void setFontSize(String size, String source){
+        Platform.runLater(() -> {
+            webView.requestFocus();
+            quill.executeScript("quill.focus();" +
+                    "quill.format('size','" + size + "','" + source + "');"
+            );
+            forceRepaint();
+        });
+    }
+
+    private void setFontType(String type, String source){
+        Platform.runLater(() -> {
+            webView.requestFocus();
+            quill.executeScript("quill.focus();" +
+                    "quill.format('font','" + type + "','" + source + "');"
+            );
+            forceRepaint();
+        });
+    }
+
+    private void setTextAlignment(String alignment, String source){
+        Platform.runLater(() -> {
+            webView.requestFocus();
+            quill.executeScript("quill.focus();" +
+                    "quill.format('align','" + alignment + "','" + source + "');"
+            );
+            forceRepaint();
+        });
+    }
+
     private void initializeShortcuts(){
         webView.addEventFilter(KeyEvent.KEY_PRESSED, event -> {
             if (event.isControlDown() || event.isMetaDown()) {  //ctrl (windows), cmd (mac)
-                System.out.println("Ctrl key detected with: " + event.getCode());
                 switch (event.getCode()) {
                     case Z:
                         event.consume();    // Prevents event from being passed to quill
@@ -292,7 +304,6 @@ public class Editor {
                         break;
                     case K:
                         event.consume();
-                        System.out.println("Ctrl+K pressed!");
                         applyLink("user");
                         break;
                     case C:
@@ -324,16 +335,6 @@ public class Editor {
         });
     }
 
-    private void toolBarFontSize(String size, String source){
-        Platform.runLater(() -> {
-            webView.requestFocus();
-            quill.executeScript("quill.focus();" +
-                    "quill.format('size','" + size + "','" + source + "');"
-            );
-            forceRepaint();
-        });
-    }
-
     // Getters & Setters
     public BorderPane getView() {
         return mainLayout;
@@ -355,8 +356,10 @@ public class Editor {
     private HashMap<String, BiConsumer<String, String>> giveFunctionsWithParams(){
         HashMap<String, BiConsumer<String, String>> temp = new HashMap<>();
         temp.put("format", this::format);
-        temp.put("setFontSize", this::toolBarFontSize);
+        temp.put("setFontSize", this::setFontSize);
+        temp.put("setFontType", this::setFontType);
         temp.put("applyScript", this::applyScript);
+        temp.put("setTextAlignment", this::setTextAlignment);
         return temp;
     }
 

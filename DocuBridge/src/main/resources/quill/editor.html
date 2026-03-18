@@ -63,6 +63,14 @@
     ];
     Quill.register(Size, true);
 
+    var Font = Quill.import('attributors/style/font');
+    Font.whitelist = ['Arial', 'Courier New', 'Georgia', 'Times New Roman'];
+    Quill.register(Font, true);
+
+    var Align = Quill.import('attributors/style/align');
+    Align.whitelist = ['left', 'center', 'right', 'justify'];
+    Quill.register(Align, true);
+
     // ensure editor gets focus after load
     setTimeout(function() {
         quill.focus();

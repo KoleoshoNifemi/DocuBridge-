@@ -52,17 +52,10 @@ public class Toolbar {
         ToolBar formatToolbar = new ToolBar();
 
         // alignment list
-        ComboBox<String> alignCombo = new ComboBox<>();
-        alignCombo.getItems().addAll("Align Left", "Align Center", "Align Right");
-        alignCombo.setPrefWidth(110);
-        alignCombo.setPromptText("Alignment");
-
-        // Font List
-        ComboBox<String> font = new ComboBox<>();
-        font.getItems().addAll("Arial", "Courier New", "Georgia", "Times New Roman");
-
-                font.setPrefWidth(100);
-        font.setPromptText("Font");
+//        ComboBox<String> alignCombo = new ComboBox<>();
+//        alignCombo.getItems().addAll("Align Left", "Align Center", "Align Right");
+//        alignCombo.setPrefWidth(110);
+//        alignCombo.setPromptText("Alignment");
 
         // Color data
         Color[] colors = {null, Color.YELLOW, Color.LIME, Color.CYAN, Color.MAGENTA, Color.BLUE,
@@ -81,9 +74,9 @@ public class Toolbar {
                 subscript = (createButton("Aₓ", "-fx-font-size: 14;", "applyScript", "sub", "user")),
                 superscript = (createButton("Aˣ", "-fx-font-size: 14;", "applyScript", "super", "user")),
                 createSeparator(),
-                font,
+                createFontTypeOptions(),
                 createFontSizeOptions(),
-                alignCombo,
+                createAlignmentOptions(),
                 createColorMenu("Highlight", colors, names, true),
                 createColorMenu("Font Color", colors, names, false),
                 createSeparator()
@@ -181,6 +174,43 @@ public class Toolbar {
             }
         });
         return fontSizeCombo;
+    }
+
+    private ComboBox<String> createFontTypeOptions(){
+        ComboBox<String> fontType = new ComboBox<>();
+        fontType.getItems().addAll("Arial", "Courier New", "Georgia", "Times New Roman");
+        fontType.setPrefWidth(100);
+        fontType.setPromptText("Font");
+
+        fontType.setOnAction(e -> {
+            String value = fontType.getValue();
+
+            if (value != null && !value.isEmpty()) {
+                BiConsumer<String, String> format = formats.get("setFontType");
+                if (format != null) {
+                    format.accept(value, "user");
+                }
+            }
+        });
+        return fontType;
+    }
+
+    private ComboBox<String> createAlignmentOptions(){
+        ComboBox<String> alignment = new ComboBox<>();
+        alignment.getItems().addAll("Left", "Center", "Right", "Justify");
+        alignment.setPrefWidth(110);
+        alignment.setPromptText("Alignment");
+
+        alignment.setOnAction(e -> {
+            String value = alignment.getValue();
+            if (value != null && !value.isEmpty()) {
+                BiConsumer<String, String> format = formats.get("setTextAlignment");
+                if (format != null) {
+                    format.accept(value.toLowerCase(), "user");
+                }
+            }
+        });
+        return alignment;
     }
 
     // Create Button
