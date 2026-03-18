@@ -17,7 +17,7 @@
         }
 
         .ql-editor {
-            font-family: 'Calibri', 'Segoe UI', 'Arial', 'Times New Roman', 'Georgia';
+            font-family: 'Arial', 'Courier New', 'Georgia', 'Times New Roman';
             font-size: 16px;
             padding: 20px;
             min-height: 750px;
@@ -70,6 +70,12 @@
     var Align = Quill.import('attributors/style/align');
     Align.whitelist = ['left', 'center', 'right', 'justify'];
     Quill.register(Align, true);
+
+    var Color = Quill.import('attributors/style/color');
+    Quill.register(Color, true);
+
+    var Background = Quill.import('attributors/style/background');
+    Quill.register(Background, true);
 
     // ensure editor gets focus after load
     setTimeout(function() {

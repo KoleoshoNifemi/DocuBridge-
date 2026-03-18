@@ -19,6 +19,7 @@ public class Toolbar {
     private HashMap<String, Runnable> voidFunctions;
     private HashMap<String, BiConsumer<String, String>> formats;
     private HashMap<String, Callable<Object>> returnFunctions;
+    private HashMap<String, String> rgbColor;
     private Callable<Object> getTextProperties;
     private Button bold;
     private Button italic;
@@ -38,6 +39,23 @@ public class Toolbar {
 
     }
 
+    private void defineRGBColor(String[] colorNames, Color[] colors) {
+        rgbColor = new HashMap<>();
+
+        for (int x = 0; x < colorNames.length; x++){
+            if (colors[x] != null) {
+                // Convert JavaFX Color to CSS hex format
+                String hexColor = String.format("#%02X%02X%02X",
+                    (int) (colors[x].getRed() * 255),
+                    (int) (colors[x].getGreen() * 255),
+                    (int) (colors[x].getBlue() * 255));
+                rgbColor.put(colorNames[x], hexColor);
+            } else {
+                rgbColor.put(colorNames[x], "transparent");
+            }
+        }
+    }
+
     private void createToolbar() {
         MenuBar menuBar = new MenuBar();
 
@@ -51,18 +69,15 @@ public class Toolbar {
 
         ToolBar formatToolbar = new ToolBar();
 
-        // alignment list
-//        ComboBox<String> alignCombo = new ComboBox<>();
-//        alignCombo.getItems().addAll("Align Left", "Align Center", "Align Right");
-//        alignCombo.setPrefWidth(110);
-//        alignCombo.setPromptText("Alignment");
 
         // Color data
         Color[] colors = {null, Color.YELLOW, Color.LIME, Color.CYAN, Color.MAGENTA, Color.BLUE,
                 Color.RED, Color.NAVY, Color.TEAL, Color.GREEN, Color.PURPLE,
-                Color.MAROON, Color.GRAY, Color.SILVER, Color.BLACK};
+                Color.MAROON, Color.GRAY, Color.SILVER, Color.BLACK, Color.WHITE};
         String[] names = {"No Color", "Yellow", "Lime", "Cyan", "Magenta", "Blue",
-                "Red", "Navy", "Teal", "Green", "Purple", "Maroon", "Gray", "Silver", "Black"};
+                "Red", "Navy", "Teal", "Green", "Purple", "Maroon", "Gray", "Silver", "Black", "White"};
+        defineRGBColor(names, colors);
+
 
         // ToolBar buttons
         formatToolbar.getItems().addAll(
@@ -100,10 +115,30 @@ public class Toolbar {
         for (int row = 0; row < 3; row++) {
             for (int col = 0; col < 5; col++) {
                 if (index < colors.length) {
+                    // Skip white for highlight menu
+                    if (isHighlight && index == colors.length - 1) {
+                        break;
+                    }
+                    
                     Color color = colors[index] == null ? Color.TRANSPARENT : colors[index];
                     String colorName = names[index];
 
                     Button colorButton = createColorButton(color, colorName);
+                    if(isHighlight){
+                        colorButton.setOnAction(e -> {
+                            BiConsumer<String, String> format = formats.get("setHighlightColor");
+                            if (format != null) {
+                                format.accept(rgbColor.get(colorButton.getTooltip().getText()), "user");
+                            }
+                        });
+                    }else{
+                        colorButton.setOnAction(e -> {
+                            BiConsumer<String, String> format = formats.get("setFontColor");
+                            if (format != null) {
+                                format.accept(rgbColor.get(colorButton.getTooltip().getText()), "user");
+                            }
+                        });
+                    }
                     colorGrid.add(colorButton, col, row);
                     index++;
                 }

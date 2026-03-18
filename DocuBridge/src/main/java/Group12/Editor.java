@@ -139,6 +139,7 @@ public class Editor {
         });
     }
 
+    // Text formatting functions
     private void fontSizeShortcut(String operand, String source){
         Platform.runLater(() -> {
             quill.executeScript("quill.focus();" +
@@ -274,6 +275,26 @@ public class Editor {
         });
     }
 
+    private void setTextColour(String colour, String source){
+        Platform.runLater(() -> {
+           webView.requestFocus();
+           quill.executeScript("quill.focus();" +
+                   "quill.format('color','" + colour + "','" + source + "');"
+           );
+           forceRepaint();
+        });
+    }
+
+    private void setTextHighlight (String colour, String source){
+        Platform.runLater(() -> {
+            webView.requestFocus();
+            quill.executeScript("quill.focus();" +
+                    "quill.format('background','" + colour + "','" + source + "');"
+            );
+            forceRepaint();
+        });
+    }
+
     private void initializeShortcuts(){
         webView.addEventFilter(KeyEvent.KEY_PRESSED, event -> {
             if (event.isControlDown() || event.isMetaDown()) {  //ctrl (windows), cmd (mac)
@@ -360,6 +381,8 @@ public class Editor {
         temp.put("setFontType", this::setFontType);
         temp.put("applyScript", this::applyScript);
         temp.put("setTextAlignment", this::setTextAlignment);
+        temp.put("setFontColor", this::setTextColour);
+        temp.put("setHighlightColor", this::setTextHighlight);
         return temp;
     }
 
