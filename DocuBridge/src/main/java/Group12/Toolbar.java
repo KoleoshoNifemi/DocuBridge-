@@ -1,5 +1,6 @@
 package Group12;
 
+import javafx.application.Platform;
 import javafx.stage.Screen;
 import javafx.scene.control.*;
 import javafx.scene.layout.VBox;
@@ -8,52 +9,26 @@ import javafx.geometry.Orientation;
 import javafx.scene.control.Separator;
 import javafx.scene.paint.Color;
 import javafx.scene.shape.Rectangle;
+
 import java.util.HashMap;
-import java.util.concurrent.Callable;
 import java.util.function.BiConsumer;
 
 public class Toolbar {
 
     private double dpi;
     private VBox toolbarContainer;
-    private HashMap<String, Runnable> voidFunctions;
+    private HashMap<String, Runnable> clipBoard;
     private HashMap<String, BiConsumer<String, String>> formats;
-    private HashMap<String, Callable<Object>> returnFunctions;
-    private HashMap<String, String> rgbColor;
-    private Callable<Object> getTextProperties;
+    private Button undo;
+    private Button redo;
     private Button bold;
     private Button italic;
     private Button underline;
-    private Button strikethrough;
-    private Button  subscript;
-    private Button superscript;
-
 
 
 
     private double readDPI() {
         return Screen.getPrimary().getDpi();
-    }
-
-    private void displayTextProperties(){
-
-    }
-
-    private void defineRGBColor(String[] colorNames, Color[] colors) {
-        rgbColor = new HashMap<>();
-
-        for (int x = 0; x < colorNames.length; x++){
-            if (colors[x] != null) {
-                // Convert JavaFX Color to CSS hex format
-                String hexColor = String.format("#%02X%02X%02X",
-                    (int) (colors[x].getRed() * 255),
-                    (int) (colors[x].getGreen() * 255),
-                    (int) (colors[x].getBlue() * 255));
-                rgbColor.put(colorNames[x], hexColor);
-            } else {
-                rgbColor.put(colorNames[x], "transparent");
-            }
-        }
     }
 
     private void createToolbar() {
@@ -69,38 +44,126 @@ public class Toolbar {
 
         ToolBar formatToolbar = new ToolBar();
 
+        // Font list
+        ComboBox<String> font = new ComboBox<>();
+        font.getItems().addAll("Calibri", "Segoe UI", "Arial", "Helvetica");
+        font.setPrefWidth(100);
+        font.setPromptText("Font");
+
+        // Font sizes list
+        ComboBox<Integer> fontSizeCombo = new ComboBox<>();
+        fontSizeCombo.getItems().addAll(8, 9, 10, 11, 12, 14, 16, 18, 24, 30, 36, 48, 60, 72, 96);
+        fontSizeCombo.setEditable(true);
+        fontSizeCombo.setPrefWidth(92);
+        fontSizeCombo.setPromptText("Font Size");
 
         // Color data
         Color[] colors = {null, Color.YELLOW, Color.LIME, Color.CYAN, Color.MAGENTA, Color.BLUE,
                 Color.RED, Color.NAVY, Color.TEAL, Color.GREEN, Color.PURPLE,
-                Color.MAROON, Color.GRAY, Color.SILVER, Color.BLACK, Color.WHITE};
+                Color.MAROON, Color.GRAY, Color.SILVER, Color.BLACK};
         String[] names = {"No Color", "Yellow", "Lime", "Cyan", "Magenta", "Blue",
-                "Red", "Navy", "Teal", "Green", "Purple", "Maroon", "Gray", "Silver", "Black", "White"};
-        defineRGBColor(names, colors);
+                "Red", "Navy", "Teal", "Green", "Purple", "Maroon", "Gray", "Silver", "Black"};
 
+        // Alignment dropdown
+        ComboBox<String> alignCombo = new ComboBox<>();
+        alignCombo.getItems().addAll("Align Left", "Align Center", "Align Right");
+        alignCombo.setPrefWidth(110);
+        alignCombo.setPromptText("Alignment");
 
-        // ToolBar buttons
+        // Headers dropdown
+        ComboBox<String> headersCombo = new ComboBox<>();
+        headersCombo.getItems().addAll("No Header", "Header 1", "Header 2", "Header 3", "Header 4", "Header 5", "Header 6");
+        headersCombo.setPrefWidth(110);
+        headersCombo.setPromptText("Headers");
+        headersCombo.setOnAction(event -> {
+            String selected = headersCombo.getValue();
+            if (selected != null) {
+                BiConsumer<String, String> formatFn = formats.get("format");
+                if (formatFn != null) {
+                    if (selected.equals("No Header")) {
+                        formatFn.accept("header", "false");
+                    } else {
+                        // Extract the level number from the selected string (e.g. "Header 1" -> "1")
+                        String level = selected.replace("Header ", "");
+                        formatFn.accept("header", level);
+                    }
+                }
+            }
+        });
+
+        // Translation dropdown
+        MenuButton translationMenu = createTranslationMenu();
+
+        // ToolBar buttons in the requested order:
+        // Undo, Redo, Bold, Italic, Subscript, Superscript, Strikethrough,
+        // Font, Font Size, Font Color, Highlight, Alignment, Headers, Translation
         formatToolbar.getItems().addAll(
-                createButton("Undo", "-fx-font-size: 14;", "undo", null, null),
-                createButton("Redo", "-fx-font-size: 14;", "redo", null, null),
-                bold = (createButton("B", "-fx-font-weight: bold;", "format", "bold", "user")),
-                italic = (createButton("I", "-fx-font-style: italic;", "format", "italic", "user")),
-                underline = (createButton("U", "-fx-underline: true;", "format", "underline", "user")),
-                subscript = (createButton("Aₓ", "-fx-font-size: 14;", "applyScript", "sub", "user")),
-                superscript = (createButton("Aˣ", "-fx-font-size: 14;", "applyScript", "super", "user")),
+                createButton("Undo",  "-fx-font-size: 14;",      "undo",        null,          null),
+                createButton("Redo",  "-fx-font-size: 14;",      "redo",        null,          null),
                 createSeparator(),
-                createFontTypeOptions(),
-                createFontSizeOptions(),
-                createAlignmentOptions(),
-                createColorMenu("Highlight", colors, names, true),
+                createButton("B",     "-fx-font-weight: bold;",  "format",      "bold",        "user"),
+                createButton("I",     "-fx-font-style: italic;", "format",      "italic",      "user"),
+                createButton("U",     "-fx-underline: true;",    "format",      "underline",   "user"),
+                createSeparator(),
+                createButton("Aₓ",   "-fx-font-size: 14;",      "applyScript", "sub",         "user"),
+                createButton("Aˣ",   "-fx-font-size: 14;",      "applyScript", "super",       "user"),
+                createButton("S\u0336", "-fx-font-size: 14;",   "format",      "strike",      "user"),
+                createSeparator(),
+                font,
+                fontSizeCombo,
+                createSeparator(),
                 createColorMenu("Font Color", colors, names, false),
-                createSeparator()
+                createColorMenu("Highlight",  colors, names, true),
+                createSeparator(),
+                alignCombo,
+                headersCombo,
+                createSeparator(),
+                translationMenu
         );
 
         toolbarContainer = new VBox(menuBar, formatToolbar);
     }
 
-    // create the color menu grid
+    // Creates the translation menu with language options
+    private MenuButton createTranslationMenu() {
+        MenuButton translationMenu = new MenuButton("Translation");
+        translationMenu.setStyle("-fx-font-size: 14;");
+
+        String[] languages = {
+                "No Translation",
+                "French",
+                "Spanish",
+                "German",
+                "Arabic",
+                "Chinese (Simplified)",
+                "Portuguese",
+                "Japanese"
+        };
+
+        for (String language : languages) {
+            MenuItem langItem = new MenuItem(language);
+            langItem.setOnAction(event -> {
+                // "No Translation" clears any active translation; other options trigger translate
+                if (language.equals("No Translation")) {
+                    // No-op or hook into a clearTranslation handler if added later
+                    System.out.println("Translation cleared.");
+                } else {
+                    // Hook into a translation handler passed via formats map if available
+                    BiConsumer<String, String> translateFn = formats.get("translate");
+                    if (translateFn != null) {
+                        translateFn.accept(language, "user");
+                    } else {
+                        System.out.println("Translate to: " + language);
+                    }
+                }
+            });
+            translationMenu.getItems().add(langItem);
+        }
+
+        return translationMenu;
+    }
+
+    // Create the color menu grid
     private MenuButton createColorMenu(String menuName, Color[] colors, String[] names, boolean isHighlight) {
         MenuButton colorMenu = new MenuButton(menuName);
         colorMenu.setStyle("-fx-font-size: 14;");
@@ -115,30 +178,10 @@ public class Toolbar {
         for (int row = 0; row < 3; row++) {
             for (int col = 0; col < 5; col++) {
                 if (index < colors.length) {
-                    // Skip white for highlight menu
-                    if (isHighlight && index == colors.length - 1) {
-                        break;
-                    }
-                    
                     Color color = colors[index] == null ? Color.TRANSPARENT : colors[index];
                     String colorName = names[index];
 
                     Button colorButton = createColorButton(color, colorName);
-                    if(isHighlight){
-                        colorButton.setOnAction(e -> {
-                            BiConsumer<String, String> format = formats.get("setHighlightColor");
-                            if (format != null) {
-                                format.accept(rgbColor.get(colorButton.getTooltip().getText()), "user");
-                            }
-                        });
-                    }else{
-                        colorButton.setOnAction(e -> {
-                            BiConsumer<String, String> format = formats.get("setFontColor");
-                            if (format != null) {
-                                format.accept(rgbColor.get(colorButton.getTooltip().getText()), "user");
-                            }
-                        });
-                    }
                     colorGrid.add(colorButton, col, row);
                     index++;
                 }
@@ -152,7 +195,7 @@ public class Toolbar {
         return colorMenu;
     }
 
-    // creates the color buttons
+    // Creates the color buttons
     private Button createColorButton(Color color, String colorName) {
         Rectangle colorRect = new Rectangle(30, 30);
         colorRect.setFill(color);
@@ -179,91 +222,21 @@ public class Toolbar {
         return menu;
     }
 
-    private ComboBox<Integer> createFontSizeOptions(){
-        ComboBox<Integer> fontSizeCombo = new ComboBox<>();
-        fontSizeCombo.getItems().addAll(8, 9, 10, 11, 12, 14, 16, 18, 24, 30, 36, 48, 60, 72);
-        fontSizeCombo.setEditable(true);
-        fontSizeCombo.setPrefWidth(92);
-        fontSizeCombo.setPromptText("Font Size");
-
-        fontSizeCombo.setOnAction(e -> {
-            Object value = fontSizeCombo.getValue();
-
-            Integer size = null;
-
-            if (value instanceof Integer) {
-                size = (Integer) value;
-            } else if (value instanceof String) {
-                try {
-                    size = Integer.parseInt(((String) value).trim());
-                } catch (NumberFormatException ex) {
-                    fontSizeCombo.getEditor().clear();
-                    return;
-                }
-            }
-
-            if (size != null) {
-                int px = (int) Math.round(size * 1.333);
-                fontSizeCombo.setValue(size); // normalize back to Integer
-                formats.get("setFontSize").accept(px + "px", "user");
-            }
-        });
-        return fontSizeCombo;
-    }
-
-    private ComboBox<String> createFontTypeOptions(){
-        ComboBox<String> fontType = new ComboBox<>();
-        fontType.getItems().addAll("Arial", "Courier New", "Georgia", "Times New Roman");
-        fontType.setPrefWidth(100);
-        fontType.setPromptText("Font");
-
-        fontType.setOnAction(e -> {
-            String value = fontType.getValue();
-
-            if (value != null && !value.isEmpty()) {
-                BiConsumer<String, String> format = formats.get("setFontType");
-                if (format != null) {
-                    format.accept(value, "user");
-                }
-            }
-        });
-        return fontType;
-    }
-
-    private ComboBox<String> createAlignmentOptions(){
-        ComboBox<String> alignment = new ComboBox<>();
-        alignment.getItems().addAll("Left", "Center", "Right", "Justify");
-        alignment.setPrefWidth(110);
-        alignment.setPromptText("Alignment");
-
-        alignment.setOnAction(e -> {
-            String value = alignment.getValue();
-            if (value != null && !value.isEmpty()) {
-                BiConsumer<String, String> format = formats.get("setTextAlignment");
-                if (format != null) {
-                    format.accept(value.toLowerCase(), "user");
-                }
-            }
-        });
-        return alignment;
-    }
-
     // Create Button
     private Button createButton(String text, String style, String functionName, String param1, String param2) {
         Button button = new Button(text);
         button.setStyle(style);
-        button.setFocusTraversable(false);
         setButtonActions(button, functionName, param1, param2);
         return button;
     }
 
     private void setButtonActions(Button button, String functionName, String param1, String param2) {
-        if (voidFunctions.containsKey(functionName)) {
+        if (clipBoard.containsKey(functionName)) {
             button.setOnAction(event -> {
-                Runnable function = voidFunctions.get(functionName);
+                Runnable function = clipBoard.get(functionName);
                 function.run();
             });
-        }else{
+        } else {
             button.setOnAction(event -> {
                 BiConsumer<String, String> format = formats.get(functionName);
                 format.accept(param1, param2);
@@ -271,10 +244,9 @@ public class Toolbar {
         }
     }
 
-    public Toolbar(HashMap<String, Runnable> voidFunctions,
-                   HashMap<String, BiConsumer<String, String>> formats) {
+    public Toolbar(HashMap<String, Runnable> clipBoard, HashMap<String, BiConsumer<String, String>> formats) {
         dpi = readDPI();
-        this.voidFunctions = voidFunctions;
+        this.clipBoard = clipBoard;
         this.formats = formats;
         createToolbar();
     }
