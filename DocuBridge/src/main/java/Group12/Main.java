@@ -8,6 +8,7 @@ public class Main extends Application {
 
     @Override
     public void start(Stage stage) {
+        // Build the editor UI and show it in a window
 
         Editor editor = new Editor("Untitled Document");
 
@@ -19,6 +20,7 @@ public class Main extends Application {
     }
 
     public static void main(String[] args) {
+        // Standard JavaFX entry point
         launch(args);
     }
 }

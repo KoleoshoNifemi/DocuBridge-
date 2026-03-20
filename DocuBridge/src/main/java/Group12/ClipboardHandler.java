@@ -14,11 +14,12 @@ import java.io.File;
 // Uses keyboard event listeners and JSObject for direct, reliable clipboard access.
 
 public class ClipboardHandler {
-    private final WebView webView;
-    private final WebEngine quill;
+    private final WebView webView; // view hosting Quill editor content
+    private final WebEngine quill; // engine used to run JavaScript for clipboard actions
 
 
     public ClipboardHandler(WebView webView) {
+        // Keep a handle on the WebView and its engine so we can talk to Quill
         this.webView = webView;
         this.quill = webView.getEngine();
         setupJavaScriptBridge();
@@ -26,6 +27,7 @@ public class ClipboardHandler {
 
     // Enables Clipboard access for the webview
     private void enableClipboard() {
+        // Allow the embedded browser to use system clipboard features
         webView.setContextMenuEnabled(true);
         quill.setJavaScriptEnabled(true);
         quill.setUserDataDirectory(new File(System.getProperty("java.io.tmpdir")));
@@ -37,7 +39,7 @@ public class ClipboardHandler {
         // Keyboard listeners are now handled in Editor.java initializeShortcuts()
     }
 
-    // Handle Ctrl+C - Copy selected text to system clipboard
+    // Handle Ctrl+C to copy selected text to system clipboard
     public void handleCopy() {
         try {
             // Get the selected text from Quill using direct executeScript
@@ -67,7 +69,7 @@ public class ClipboardHandler {
         }
     }
 
-    // Handle Ctrl+X - Cut selected text to system clipboard
+    // Handle Ctrl+X to cut selected text to system clipboard
     public void handleCut() {
         try {
             // Get the selected text from Quill using direct executeScript
@@ -104,13 +106,12 @@ public class ClipboardHandler {
         }
     }
 
-    // Handle Ctrl+V - Paste from system clipboard into Quill
+    // Handle Ctrl+V to paste from system clipboard into Quill
     public void handlePaste() {
         Platform.runLater(() -> {
             try {
                 Clipboard clipboard = Clipboard.getSystemClipboard();
-                
-                // Try to get HTML first, fall back to plain text
+                // Prefer HTML if present, otherwise fall back to plain text
                 String content = null;
                 boolean isHtml = false;
                 
@@ -148,7 +149,6 @@ public class ClipboardHandler {
                         "delete window._pasteIsHtml;";
                 
                 quill.executeScript(script);
-                
             } catch (Exception e) {
                 e.printStackTrace();
             }

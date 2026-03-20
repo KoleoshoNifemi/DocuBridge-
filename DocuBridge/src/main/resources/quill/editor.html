@@ -3,7 +3,17 @@
 <head>
     <meta charset="utf-8">
     <title>Quill Editor</title>
+    <script>
+        // Disable native scroll commands that can force jump-to-caret in WebView/WebKit
+        Element.prototype.scrollIntoView = function() {};
+        Element.prototype.scrollIntoViewIfNeeded = function() {};
+        window.scrollTo = function() {};
+        window.scroll = function() {};
+        window.scrollBy = function() {};
+    </script>
     <script src="quill.js"></script>
+    <script src="image-tools.js"></script>
+
     <style>
         body {
             margin: 0;
@@ -14,6 +24,9 @@
         #editor-container {
             height: 750px;
             background: white;
+            /* Reserve space for the WebView scrollbar so it doesn't cover content */
+            padding-right: 18px;
+            box-sizing: border-box;
         }
 
         .ql-editor {
@@ -23,10 +36,77 @@
             min-height: 750px;
             outline: none;
             line-height: 1.5;
+            box-sizing: border-box;
+            /* Keep space for the WebView scrollbar so it doesn't cover the page edge */
+            scrollbar-gutter: stable;
         }
 
         .ql-editor p {
             margin: 0 0 8px 0;
+            box-sizing: border-box;
+        }
+
+        .ql-editor span[style*="background-color"] {
+            padding: 2px 4px;
+            box-sizing: border-box;
+            display: inline;
+            vertical-align: baseline;
+        }
+
+        .ql-editor span[style*="font-size"] {
+            line-height: 1.5;
+        }
+
+        .ql-editor ol {
+            list-style-type: none;
+            padding-left: 2em;
+            margin: 0.5em 0;
+            counter-reset: list-counter;
+        }
+
+        .ql-editor ol li[data-list="bullet"] {
+            list-style-type: none;
+            counter-increment: none;
+        }
+
+        .ql-editor ol li[data-list="bullet"]::before {
+            content: "•";
+            margin-right: 0.5em;
+            margin-left: -1.5em;
+        }
+
+        .ql-editor ol li:not([data-list]) {
+            counter-increment: list-counter;
+        }
+
+        .ql-editor ol li:not([data-list])::before {
+            content: counter(list-counter) ". ";
+            margin-right: 0.5em;
+            margin-left: -1.5em;
+        }
+
+        .ql-editor ol li[data-list="ordered"]::before {
+            content: counter(list-counter) ". ";
+            margin-right: 0.5em;
+            margin-left: -1.5em;
+            counter-increment: list-counter;
+        }
+
+        .ql-editor li {
+            margin: 0.25em 0;
+        }
+
+        /* Basic image styling for inline-block floats so text wraps beside */
+        .ql-editor img,
+        .ql-editor .ql-image {
+            max-width: 100%;
+            height: auto;
+            display: inline-block;
+            vertical-align: top;
+            float: left;
+            margin: 0 12px 0 0;
+            border-radius: 4px;
+            cursor: pointer;
         }
     </style>
 </head>
@@ -34,19 +114,23 @@
 <div id="editor-container"></div>
 
 <script>
+
+
     var quill = new Quill('#editor-container', {
         theme: 'snow',
         modules: {
             toolbar: false,
-            keyboard: true,
             history: {
                 delay: 1,
                 maxStack: 1000,
-                userOnly: true       //only track this user's changes (local changes)
+                userOnly: true
             }
         },
         placeholder: null
     });
+
+
+    window.quillEditor = quill;
 
     var Size = Quill.import('attributors/style/size');
     Size.whitelist = [
@@ -71,13 +155,93 @@
     Align.whitelist = ['left', 'center', 'right', 'justify'];
     Quill.register(Align, true);
 
+    var Header = Quill.import('formats/header');
+    Quill.register(Header, true);
+
     var Color = Quill.import('attributors/style/color');
     Quill.register(Color, true);
 
     var Background = Quill.import('attributors/style/background');
     Quill.register(Background, true);
 
-    // ensure editor gets focus after load
+    var List = Quill.import('formats/list');
+    var ListItem = Quill.import('formats/list-item');
+    Quill.register(List, true);
+    Quill.register(ListItem, true);
+
+    window.getEditorContentForWord = function() {
+        const delta = quill.getContents();
+        return JSON.stringify(delta);
+    };
+
+    window.getEditorText = function() {
+        return quill.getText();
+    };
+
+    window.getEditorHTML = function() {
+        return quill.root.innerHTML;
+    };
+
+    window.setEditorContent = function(content, isHTML) {
+        if (isHTML) {
+            quill.root.innerHTML = content;
+            quill.update();
+        } else {
+            quill.setContents(JSON.parse(content));
+        }
+    };
+
+    window.clearEditor = function() {
+        quill.setContents([]);
+    };
+
+    window.hasChanges = function() {
+        return quill.getLength() > 1;
+    };
+
+    quill.root.addEventListener('keydown', function(e) {
+        const selection = quill.getSelection();
+        if (!selection) {
+            return;
+        }
+
+        const index = selection.index;
+        const formats = quill.getFormat(index, 0);
+
+        if (e.key === 'Backspace' && selection.length === 0 && formats.list) {
+            if (index === 0) {
+                e.preventDefault();
+                quill.format('list', false);
+                quill.focus();
+                return;
+            }
+
+            let lineStart = 0;
+            for (let i = index - 1; i >= 0; i--) {
+                if (quill.getText(i, 1) === '\n') {
+                    lineStart = i + 1;
+                    break;
+                }
+            }
+
+            const lineText = quill.getText(lineStart, index - lineStart).trim();
+
+            if (lineText === '') {
+                e.preventDefault();
+                quill.format('list', false);
+                quill.focus();
+                return;
+            }
+        }
+    });
+
+
+    quill.root.addEventListener('blur', function() {
+        setTimeout(function() {
+            quill.focus();
+        }, 10);
+    });
+
     setTimeout(function() {
         quill.focus();
     }, 200);
