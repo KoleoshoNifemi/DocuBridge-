@@ -16,6 +16,7 @@ public class Main extends Application {
 
         stage.setTitle("DocuBridge");
         stage.setScene(scene);
+        stage.setMaximized(true);
         stage.show();
     }
 

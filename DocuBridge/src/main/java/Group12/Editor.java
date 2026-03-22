@@ -33,8 +33,9 @@ public class Editor {
     private BorderPane mainLayout;
     private Toolbar toolBar;
     private double dpi;
-    private ClipboardHandler clipboardHandler;
     private VBox editorWrapper;
+    private ClipboardHandler clipboardHandler;
+
 
     private double readDPI(){
         return Screen.getPrimary().getDpi();
@@ -88,8 +89,6 @@ public class Editor {
         editorWrapper.setAlignment(Pos.TOP_CENTER);
         editorWrapper.setPadding(Insets.EMPTY); // remove gaps above/below
         editorWrapper.setStyle("-fx-background-color: transparent;");
-        // Apply drop shadow directly to the WebView to keep the same visual while removing wrapper padding
-        webView.setEffect(new DropShadow(10, 0, 2, javafx.scene.paint.Color.rgb(0,0,0,0.1)));
         VBox.setVgrow(webView, Priority.ALWAYS);
         webView.setMaxHeight(Double.MAX_VALUE);
         editorWrapper.getChildren().add(webView);
@@ -493,6 +492,10 @@ public class Editor {
         }
     }
 
+    private void search(String text){
+
+    }
+
     private void initializeShortcuts(){
 
         webView.addEventFilter(KeyEvent.KEY_PRESSED, event -> {
@@ -537,6 +540,14 @@ public class Editor {
                     case V:
                         event.consume();
                         clipboardHandler.handlePaste();
+                        break;
+                    case F:
+                        event.consume();
+                        // Pass a lambda that calls the JS function and returns the text
+                        new WordSearch(this::quillExecute, () -> {
+                            Object text = quill.executeScript("window.getCachedDocumentText()");
+                            return text != null ? text.toString() : "";
+                        }, this.webView).showSearchPopup();
                         break;
                     case EQUALS:
                         event.consume();
@@ -594,7 +605,7 @@ public class Editor {
         return clipboardHandler;
     }
 
-    // These two functions provide the Toolbar object limited access to the webEngine (quill)
+    // These three functions provide the Toolbar object limited access to the webEngine (quill)
     private HashMap<String, BiConsumer<String, String>> giveFunctionsWithParams(){
         HashMap<String, BiConsumer<String, String>> temp = new HashMap<>();
         temp.put("format", this::format);
@@ -622,6 +633,13 @@ public class Editor {
         HashMap<String, Callable<Object>> temp = new HashMap<>();
         temp.put("getFormats", this::getFormats);
         return temp;
+    }
+
+    // General purpose script executor to be given to other classes where needed
+    private void quillExecute(String script, Boolean repaint){
+        Platform.runLater(() -> {quill.executeScript(script);
+        if(repaint){forceRepaint();}
+        });
     }
 
 }

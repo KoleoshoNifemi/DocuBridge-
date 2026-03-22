@@ -11,6 +11,11 @@
         window.scroll = function() {};
         window.scrollBy = function() {};
     </script>
+    <script>
+        window.api = window.api || {};
+        window.api.highlight = window.api.highlight || function() {};
+        window.api.clearHighlight = window.api.clearHighlight || function() {};
+    </script>
     <script src="quill.js"></script>
     <script src="image-tools.js"></script>
 
@@ -18,27 +23,38 @@
         body {
             margin: 0;
             padding: 0;
-            background: white;
+            /* Gray workspace background */
+            background: #e0e0e0;
+            overflow: hidden;
         }
 
         #editor-container {
-            height: 750px;
-            background: white;
+            height: 100vh;
+            /* Matches body to hide the 18px gap */
+            background: #f1f3f4;
             /* Reserve space for the WebView scrollbar so it doesn't cover content */
             padding-right: 18px;
             box-sizing: border-box;
+            overflow-y: auto;
         }
 
         .ql-editor {
+            /* The 'Paper' styling */
+            background: white;
             font-family: 'Arial', 'Courier New', 'Georgia', 'Times New Roman';
             font-size: 16px;
-            padding: 20px;
-            min-height: 750px;
+            padding: 50px !important;
+            min-height: 100%;
             outline: none;
             line-height: 1.5;
             box-sizing: border-box;
-            /* Keep space for the WebView scrollbar so it doesn't cover the page edge */
-            scrollbar-gutter: stable;
+
+            /* Center the document */
+            margin: 0 auto;
+            max-width: 850px;
+
+            /* Page shadow effect */
+            box-shadow: 0 0 10px rgba(0,0,0,0.1);
         }
 
         .ql-editor p {
@@ -108,14 +124,20 @@
             border-radius: 4px;
             cursor: pointer;
         }
+
+        .ql-editor:not(:focus) ::selection {
+            background: transparent;
+        }
+
+        .ql-container.ql-snow {
+            border: none !important;
+        }
     </style>
 </head>
 <body>
 <div id="editor-container"></div>
 
 <script>
-
-
     var quill = new Quill('#editor-container', {
         theme: 'snow',
         modules: {
@@ -129,8 +151,18 @@
         placeholder: null
     });
 
-
     window.quillEditor = quill;
+
+    // --- CACHING ADDITIONS ---
+    window.cachedDocumentText = quill.getText();
+    quill.on('text-change', function() {
+        window.cachedDocumentText = quill.getText();
+    });
+
+    window.getCachedDocumentText = function() {
+        return window.cachedDocumentText;
+    };
+    // -------------------------
 
     var Size = Quill.import('attributors/style/size');
     Size.whitelist = [
@@ -189,14 +221,20 @@
         } else {
             quill.setContents(JSON.parse(content));
         }
+        window.cachedDocumentText = quill.getText(); // Sync cache on load
     };
 
     window.clearEditor = function() {
         quill.setContents([]);
+        window.cachedDocumentText = ""; // Clear cache
     };
 
     window.hasChanges = function() {
         return quill.getLength() > 1;
+    };
+
+    window.getBounds = function(index) {
+        return quill.getBounds(index);
     };
 
     quill.root.addEventListener('keydown', function(e) {
@@ -233,13 +271,6 @@
                 return;
             }
         }
-    });
-
-
-    quill.root.addEventListener('blur', function() {
-        setTimeout(function() {
-            quill.focus();
-        }, 10);
     });
 
     setTimeout(function() {
