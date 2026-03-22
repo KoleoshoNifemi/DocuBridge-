@@ -1,4 +1,3 @@
-Group12\Editor$1.class
-Group12\ClipboardHandler.class
-Group12\Editor.class
-Group12\WordSearch.class
+Group12/WordDocumentManager.class
+Group12/DatabaseManager.class
+Group12/AuthenticationUI.class

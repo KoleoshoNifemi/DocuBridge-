@@ -25,6 +25,7 @@ import java.io.File;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.util.Base64;
+import javafx.animation.PauseTransition;
 
 public class Editor {
     private String name;
@@ -35,6 +36,7 @@ public class Editor {
     private double dpi;
     private VBox editorWrapper;
     private ClipboardHandler clipboardHandler;
+
 
 
     private double readDPI(){
@@ -118,18 +120,18 @@ public class Editor {
         // Force a repaint by triggering a browser reflow without touching history
         // Save scroll position inside the WebView to prevent snapping
         final double savedScrollY = currentScrollY();
-        
+
         PauseTransition delay = new PauseTransition(Duration.millis(50));
         delay.setOnFinished(e -> {
             // Use CSS opacity toggle to force a repaint
             quill.executeScript(
                     "var editor = document.querySelector('.ql-editor');" +
-                    "if (editor) {" +
-                    "    editor.style.opacity = '0.99';" +
-                    "    setTimeout(function() {" +
-                    "        editor.style.opacity = '1';" +
-                    "    }, 1);" +
-                    "}"
+                            "if (editor) {" +
+                            "    editor.style.opacity = '0.99';" +
+                            "    setTimeout(function() {" +
+                            "        editor.style.opacity = '1';" +
+                            "    }, 1);" +
+                            "}"
             );
 
             // JavaFX-side repaint: sub-pixel resize forces the window to redraw
@@ -188,25 +190,25 @@ public class Editor {
         Platform.runLater(() -> {
             // Adjust the font size up or down relative to the current selection
             quill.executeScript("quill.focus();" +
-                            "var selection = quill.getSelection();" +
-                            "var selectionIndex = selection ? selection.index : 0;" +
-                            "var selectionLength = selection ? selection.length : 0;" +
-                            "var currentSize = quill.getFormat().size;" +
-                            "if (!currentSize || !currentSize.endsWith('px')) {" +
-                            "    currentSize = '16px';" +   // Equivalent to 12pt font
-                            "}" +
-                            "var pxSize = parseInt(currentSize);" +
-                            "var ptSize = Math.round(pxSize / 1.333);" +
-                            "var newPtSize = ptSize " + operand + " 2;" +
-                            "if (newPtSize < 8) newPtSize = 8;" +
-                            "if (newPtSize > 92) newPtSize = 92;" +
-                            "var newSize = Math.round(newPtSize * 1.333) + 'px';" +
-                            "quill.format('size', newSize, '" + source + "');" +
-                            "setTimeout(function() {" +
-                            "    quill.update();" +
-                            "    var endIndex = selectionIndex + selectionLength;" +
-                            "    quill.setSelection(endIndex, 0);" +
-                            "}, 10);"
+                    "var selection = quill.getSelection();" +
+                    "var selectionIndex = selection ? selection.index : 0;" +
+                    "var selectionLength = selection ? selection.length : 0;" +
+                    "var currentSize = quill.getFormat().size;" +
+                    "if (!currentSize || !currentSize.endsWith('px')) {" +
+                    "    currentSize = '16px';" +   // Equivalent to 12pt font
+                    "}" +
+                    "var pxSize = parseInt(currentSize);" +
+                    "var ptSize = Math.round(pxSize / 1.333);" +
+                    "var newPtSize = ptSize " + operand + " 2;" +
+                    "if (newPtSize < 8) newPtSize = 8;" +
+                    "if (newPtSize > 92) newPtSize = 92;" +
+                    "var newSize = Math.round(newPtSize * 1.333) + 'px';" +
+                    "quill.format('size', newSize, '" + source + "');" +
+                    "setTimeout(function() {" +
+                    "    quill.update();" +
+                    "    var endIndex = selectionIndex + selectionLength;" +
+                    "    quill.setSelection(endIndex, 0);" +
+                    "}, 10);"
             );
             forceRepaint();
         });
@@ -217,9 +219,9 @@ public class Editor {
             webView.requestFocus();
             quill.executeScript(
                     "quill.focus();" +
-                    "var currentScript = quill.getFormat().script;" +
-                    "var newValue = (currentScript === '" + scriptType + "') ? false : '" + scriptType + "';" +
-                    "quill.format('script', newValue, '" + source + "');"
+                            "var currentScript = quill.getFormat().script;" +
+                            "var newValue = (currentScript === '" + scriptType + "') ? false : '" + scriptType + "';" +
+                            "quill.format('script', newValue, '" + source + "');"
             );
             forceRepaint();
         });
@@ -229,14 +231,14 @@ public class Editor {
         Platform.runLater(() -> {
             quill.executeScript(
                     "(function(){" +
-                    "  if (!window.quill) return;" +
-                    "  var sel = quill.getSelection();" +
-                    "  if (!sel) return;" +
-                    "  quill.focus();" +
-                    "  var fmt = quill.getFormat();" +
-                    "  var current = fmt['" + type + "'];" +
-                    "  quill.format('" + type + "', !current, '" + source + "');" +
-                    "})();"
+                            "  if (!window.quill) return;" +
+                            "  var sel = quill.getSelection();" +
+                            "  if (!sel) return;" +
+                            "  quill.focus();" +
+                            "  var fmt = quill.getFormat();" +
+                            "  var current = fmt['" + type + "'];" +
+                            "  quill.format('" + type + "', !current, '" + source + "');" +
+                            "})();"
             );
             forceRepaint();
         });
@@ -244,7 +246,7 @@ public class Editor {
 
     private void applyLink(String source) {
         webView.requestFocus();
-        
+
         // Get current selection and link state
         JSObject selection = (JSObject) quill.executeScript("quill.getSelection(true)");
 
@@ -253,18 +255,18 @@ public class Editor {
             promptForLink(0, 0, source);
             return;
         }
-        
+
         Number indexNum = (Number) selection.getMember("index");
         Number lengthNum = (Number) selection.getMember("length");
-        
+
         int index = indexNum != null ? indexNum.intValue() : 0;
         int length = lengthNum != null ? lengthNum.intValue() : 0;
-        
+
         if (length == 0) {
             // No text selected
             return;
         }
-        
+
         // Check if selected text already has a link
         Object currentLink = quill.executeScript("quill.getFormat().link");
 
@@ -274,7 +276,7 @@ public class Editor {
             Platform.runLater(() -> {
                 quill.executeScript(
                         "quill.setSelection(" + index + ", " + length + ");" +
-                        "quill.format('link', false, '" + source + "');"
+                                "quill.format('link', false, '" + source + "');"
                 );
                 forceRepaint();
             });
@@ -283,14 +285,14 @@ public class Editor {
             promptForLink(index, length, source);
         }
     }
-    
+
     private void promptForLink(int index, int length, String source) {
         TextInputDialog dialog = new TextInputDialog("http://");
         dialog.setTitle("Add Link");
         dialog.setHeaderText("Enter the URL:");
         dialog.setContentText("URL:");
         dialog.setGraphic(null);  // Remove the question mark icon
-        
+
         java.util.Optional<String> result = dialog.showAndWait();
 
         result.ifPresent(url -> {
@@ -299,7 +301,7 @@ public class Editor {
                     // Ensure selection is still active and apply link
                     quill.executeScript(
                             "quill.setSelection(" + index + ", " + length + ");" +
-                            "quill.format('link', '" + url.replace("'", "\\'") + "', '" + source + "');"
+                                    "quill.format('link', '" + url.replace("'", "\\'") + "', '" + source + "');"
                     );
                     forceRepaint();
                 });
@@ -339,11 +341,11 @@ public class Editor {
 
     private void setTextColour(String colour, String source){
         Platform.runLater(() -> {
-           webView.requestFocus();
-           quill.executeScript("quill.focus();" +
-                   "quill.format('color','" + colour + "','" + source + "');"
-           );
-           forceRepaint();
+            webView.requestFocus();
+            quill.executeScript("quill.focus();" +
+                    "quill.format('color','" + colour + "','" + source + "');"
+            );
+            forceRepaint();
         });
     }
 
@@ -371,30 +373,30 @@ public class Editor {
     private void insertImage(String imageType, String source) {
         Platform.runLater(() -> {
             webView.requestFocus();
-            
+
             // Create file chooser for image selection
             FileChooser fileChooser = new FileChooser();
             fileChooser.setTitle("Select Image");
-            
+
             // Add image format filters
-            FileChooser.ExtensionFilter allImages = new FileChooser.ExtensionFilter("All Images", 
+            FileChooser.ExtensionFilter allImages = new FileChooser.ExtensionFilter("All Images",
                     "*.jpg", "*.jpeg", "*.png", "*.gif", "*.bmp", "*.webp");
             FileChooser.ExtensionFilter jpgFilter = new FileChooser.ExtensionFilter("JPG Images", "*.jpg", "*.jpeg");
             FileChooser.ExtensionFilter pngFilter = new FileChooser.ExtensionFilter("PNG Images", "*.png");
             FileChooser.ExtensionFilter gifFilter = new FileChooser.ExtensionFilter("GIF Images", "*.gif");
             FileChooser.ExtensionFilter allFiles = new FileChooser.ExtensionFilter("All Files", "*.*");
-            
+
             fileChooser.getExtensionFilters().addAll(allImages, jpgFilter, pngFilter, gifFilter, allFiles);
-            
+
             // Show file chooser
             File selectedFile = fileChooser.showOpenDialog(webView.getScene().getWindow());
-            
+
             if (selectedFile != null) {
                 try {
                     // Read image file and convert to Base64
                     byte[] imageBytes = Files.readAllBytes(selectedFile.toPath());
                     String base64Image = Base64.getEncoder().encodeToString(imageBytes);
-                    
+
                     // Determine MIME type based on file extension
                     String fileName = selectedFile.getName().toLowerCase();
                     String mimeType = "image/png"; // default
@@ -407,10 +409,10 @@ public class Editor {
                     } else if (fileName.endsWith(".webp")) {
                         mimeType = "image/webp";
                     }
-                    
+
                     // Create data URI for the image
                     String dataUri = "data:" + mimeType + ";base64," + base64Image;
-                    
+
                     // Insert image using Quill's native insertEmbed
                     JSObject selection = (JSObject) quill.executeScript("quill.getSelection(true)");
                     int index = 0;
@@ -420,15 +422,15 @@ public class Editor {
                             index = indexNum.intValue();
                         }
                     }
-                    
+
                     // Insert image at cursor position using Quill's native image format
                     quill.executeScript(
-                        "quill.focus(); " +
-                        "quill.insertEmbed(" + index + ", 'image', '" + dataUri.replace("'", "\\'") + "', '" + source + "'); " +
-                        "quill.insertText(" + (index + 1) + ", '\\n', '" + source + "'); " +
-                        "quill.setSelection(" + (index + 2) + ", 0);"
+                            "quill.focus(); " +
+                                    "quill.insertEmbed(" + index + ", 'image', '" + dataUri.replace("'", "\\'") + "', '" + source + "'); " +
+                                    "quill.insertText(" + (index + 1) + ", '\\n', '" + source + "'); " +
+                                    "quill.setSelection(" + (index + 2) + ", 0);"
                     );
-                    
+
                     forceRepaint();
                 } catch (IOException e) {
                     e.printStackTrace();
@@ -443,47 +445,47 @@ public class Editor {
         Platform.runLater(() -> {
             webView.requestFocus();
             quill.executeScript("quill.focus();");
-            
+
             // Determine the list format (Quill v2 uses 'bullet' for unordered, 'ordered' for ordered)
             String listFormat = listType.equals("bullet") ? "bullet" : "ordered";
-            
+
             // Check current list format and toggle if same type
             quill.executeScript(
-                "var selection = quill.getSelection(); " +
-                "if (!selection) { selection = {index: 0, length: 0}; } " +
-                "var currentFormat = quill.getFormat(selection.index, 1); " +
-                "var currentList = currentFormat.list; " +
-                "var newListValue = (currentList === '" + listFormat + "') ? false : '" + listFormat + "'; " +
-                "if (selection && selection.length > 0) { " +
-                "  quill.formatLine(selection.index, selection.length, 'list', newListValue); " +
-                "} else { " +
-                "  quill.formatLine(selection.index, 1, 'list', newListValue); " +
-                "} " +
-                "quill.focus();"
+                    "var selection = quill.getSelection(); " +
+                            "if (!selection) { selection = {index: 0, length: 0}; } " +
+                            "var currentFormat = quill.getFormat(selection.index, 1); " +
+                            "var currentList = currentFormat.list; " +
+                            "var newListValue = (currentList === '" + listFormat + "') ? false : '" + listFormat + "'; " +
+                            "if (selection && selection.length > 0) { " +
+                            "  quill.formatLine(selection.index, selection.length, 'list', newListValue); " +
+                            "} else { " +
+                            "  quill.formatLine(selection.index, 1, 'list', newListValue); " +
+                            "} " +
+                            "quill.focus();"
             );
-            
+
             forceRepaint();
         });
     }
 
 
-    
+
     private JSObject getFormats(){
         try {
             // Check if quill exists first before trying to call it
             Boolean quillExists = (Boolean) quill.executeScript("typeof quill !== 'undefined' && quill !== null");
-            
+
             if (!quillExists) {
                 return null;
             }
-            
+
             // Now safely call getFormat()
             Object result = quill.executeScript("quill.getFormat()");
-            
+
             if (result instanceof JSObject) {
                 return (JSObject) result;
             }
-            
+
             return null;
         } catch (Exception e) {
             // Silently catch exceptions - they occur during rapid state changes
@@ -572,17 +574,17 @@ public class Editor {
     private void handleBackspaceInList() {
         Platform.runLater(() -> {
             quill.executeScript(
-                "(function(){" +
-                "  var sel = quill.getSelection();" +
-                "  if (!sel || sel.length > 0) return;" +
-                "  var idx = sel.index;" +
-                "  var fmt = quill.getFormat(idx, 1);" +
-                "  var isList = fmt.list && (fmt.list === 'bullet' || fmt.list === 'ordered' || fmt.list === 'unordered');" +
-                "  if (!isList) return;" +
-                "  if (idx === 0) { quill.formatLine(idx, 1, 'list', false); return; }" +
-                "  var charBefore = quill.getText(idx - 1, 1);" +
-                "  if (charBefore === '\\n') { quill.formatLine(idx, 1, 'list', false); }" +
-                "})();"
+                    "(function(){" +
+                            "  var sel = quill.getSelection();" +
+                            "  if (!sel || sel.length > 0) return;" +
+                            "  var idx = sel.index;" +
+                            "  var fmt = quill.getFormat(idx, 1);" +
+                            "  var isList = fmt.list && (fmt.list === 'bullet' || fmt.list === 'ordered' || fmt.list === 'unordered');" +
+                            "  if (!isList) return;" +
+                            "  if (idx === 0) { quill.formatLine(idx, 1, 'list', false); return; }" +
+                            "  var charBefore = quill.getText(idx - 1, 1);" +
+                            "  if (charBefore === '\\n') { quill.formatLine(idx, 1, 'list', false); }" +
+                            "})();"
             );
             forceRepaint();
         });
@@ -638,9 +640,41 @@ public class Editor {
     // General purpose script executor to be given to other classes where needed
     private void quillExecute(String script, Boolean repaint){
         Platform.runLater(() -> {quill.executeScript(script);
-        if(repaint){forceRepaint();}
+            if(repaint){forceRepaint();}
         });
     }
 
-}
+    public void loadContent(String content) {
+        if (content == null || content.isEmpty()) {
+            content = "";
+        }
 
+        final String finalContent = content;
+
+        // Wait for Quill to be ready
+        PauseTransition pause = new PauseTransition(Duration.millis(500));
+        pause.setOnFinished(event -> {
+            // Check if Quill is ready
+            Boolean quillReady = (Boolean) quill.executeScript("typeof quill !== 'undefined' && quill !== null");
+            if (Boolean.TRUE.equals(quillReady)) {
+                Platform.runLater(() -> {
+                    // Escape the content properly for JavaScript
+                    String escaped = finalContent
+                            .replace("\\", "\\\\")
+                            .replace("\"", "\\\"")
+                            .replace("\n", "\\n");
+                    quill.executeScript("quill.setText(\"" + escaped + "\")");
+                });
+            } else {
+                // Quill still not ready, try again
+                loadContent(finalContent);
+            }
+        });
+        pause.play();
+    }
+
+    public String getContent() {
+        Object result = quill.executeScript("quill.getText()");
+        return result != null ? result.toString() : "";
+    }
+}

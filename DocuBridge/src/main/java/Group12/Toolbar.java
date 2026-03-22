@@ -570,12 +570,10 @@ public class Toolbar {
         String[] languages = {
                 "No Translation",
                 "French",
-                "Spanish",
                 "German",
-                "Arabic",
-                "Chinese (Simplified)",
+                "Greek",
                 "Portuguese",
-                "Japanese"
+                "Spanish",
         };
 
         for (String language : languages) {
