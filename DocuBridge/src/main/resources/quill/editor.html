@@ -25,17 +25,15 @@
             padding: 0;
             /* Gray workspace background */
             background: #e0e0e0;
-            overflow: hidden;
         }
 
         #editor-container {
-            height: 100vh;
+            height: 750px;
             /* Matches body to hide the 18px gap */
             background: #f1f3f4;
             /* Reserve space for the WebView scrollbar so it doesn't cover content */
             padding-right: 18px;
             box-sizing: border-box;
-            overflow-y: auto;
         }
 
         .ql-editor {
@@ -44,10 +42,11 @@
             font-family: 'Arial', 'Courier New', 'Georgia', 'Times New Roman';
             font-size: 16px;
             padding: 50px !important;
-            min-height: 100%;
+            min-height: 750px;
             outline: none;
             line-height: 1.5;
             box-sizing: border-box;
+            scrollbar-gutter: stable;
 
             /* Center the document */
             margin: 0 auto;
@@ -271,6 +270,12 @@
                 return;
             }
         }
+    });
+
+    quill.root.addEventListener('blur', function() {
+        setTimeout(function() {
+            quill.focus();
+        }, 10);
     });
 
     setTimeout(function() {
