@@ -165,7 +165,9 @@ public class Main extends Application {
             primaryStage.setOnCloseRequest(e -> {
                 saveFile();
                 disconnectFromCollab();
+                CollabServer.stopServer();
                 System.out.println("✓ File '" + currentFileName + "' saved!");
+                System.exit(0);
             });
         } catch (Exception e) {
             System.err.println("Error opening editor: " + e.getMessage());

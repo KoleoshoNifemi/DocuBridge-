@@ -49,7 +49,6 @@ public class CollabServer extends WebSocketServer {
     public CollabServer() {
         super(new InetSocketAddress(PORT));
         setReuseAddr(true);
-        setDaemon(true);
     }
 
     @Override
