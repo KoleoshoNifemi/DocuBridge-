@@ -140,16 +140,15 @@ public class Main extends Application {
         try {
             String content = db.getFileContent(currentUserId, currentFileName);
 
-            // Pass all collab callbacks directly into Editor so Toolbar can call them
             editor = new Editor(
                     currentFileName,
                     this::saveAs,
                     this::saveFile,
                     this::newFile,
                     this::openFile,
-                    this::showCollabSetupDialog,   // "Session settings…" menu item
-                    this::stopHosting,             // "Stop hosting" menu item
-                    this::disconnectFromCollab     // "Disconnect" menu item
+                    this::showCollabSetupDialog,
+                    this::stopHosting,
+                    this::disconnectFromCollab
             );
 
             if (content != null && !content.isEmpty()) editor.loadContent(content);
@@ -159,7 +158,6 @@ public class Main extends Application {
             primaryStage.setScene(scene);
             primaryStage.setMaximized(true);
 
-            // Show collab dialog after window is fully laid out
             Platform.runLater(() -> showCollabSetupDialog());
 
             startAutoSave();
@@ -193,7 +191,7 @@ public class Main extends Application {
 
         RadioButton offlineBtn = new RadioButton("Work offline  (just me)");
         RadioButton hostBtn    = new RadioButton("Host a session  (generate a room code for teammates)");
-        RadioButton joinBtn    = new RadioButton("Join a session  (enter a room code)");
+        RadioButton joinBtn    = new RadioButton("Join a session  (enter a room code or tunnel address)");
 
         ToggleGroup group = new ToggleGroup();
         offlineBtn.setToggleGroup(group);
@@ -201,10 +199,11 @@ public class Main extends Application {
         joinBtn.setToggleGroup(group);
         offlineBtn.setSelected(true);
 
+        // ── updated placeholder to reflect localhost.run format ──
         TextField codeField = new TextField();
-        codeField.setPromptText("Enter room code  e.g.  BRIDGE-4821  or  0.tcp.ngrok.io:12345");
+        codeField.setPromptText("Same WiFi: BRIDGE-4821   |   Different WiFi: abc123.lhr.life");
         codeField.setDisable(true);
-        codeField.setMaxWidth(340);
+        codeField.setMaxWidth(380);
 
         joinBtn.selectedProperty().addListener((obs, was, is) -> codeField.setDisable(!is));
 
@@ -219,7 +218,7 @@ public class Main extends Application {
         btnRow.getChildren().addAll(continueBtn, cancelBtn);
 
         root.getChildren().addAll(header, offlineBtn, hostBtn, joinBtn, codeField, new Separator(), btnRow);
-        dialogStage.setScene(new Scene(root, 460, 265));
+        dialogStage.setScene(new Scene(root, 480, 265));
 
         cancelBtn.setOnAction(e -> dialogStage.close());
 
@@ -232,29 +231,23 @@ public class Main extends Application {
                 isHosting = true;
                 activeRoomCode = CollabServer.generateRoomCode();
                 connectToCollab("localhost");
-                // Update toolbar status
                 if (editor != null) editor.getToolbar().updateCollabStatus("hosting", activeRoomCode);
                 showRoomCodeDialog(activeRoomCode);
 
             } else if (joinBtn.isSelected()) {
-                String code = codeField.getText().trim().toUpperCase();
+                String code = codeField.getText().trim();
+                // Don't uppercase — localhost.run hostnames are case sensitive
                 if (!code.isEmpty()) {
-                    String host = CollabServer.resolveHostFromCode(code);
-                    if (host != null) {
-                        collabServerHost = host;
-                        isHosting = false;
-                        connectToCollab(host);
-                        if (editor != null) editor.getToolbar().updateCollabStatus("connected", host);
-                    } else {
-                        Alert err = new Alert(Alert.AlertType.ERROR);
-                        err.setTitle("Invalid Code");
-                        err.setHeaderText("Could not connect");
-                        err.setContentText("The room code '" + code + "' is not valid.\nMake sure you entered it correctly.");
-                        err.showAndWait();
-                    }
+                    String host = CollabServer.resolveHostFromCode(code.toUpperCase());
+                    // If resolveHostFromCode didn't find a registered code, treat the
+                    // raw input as a direct address (covers localhost.run hostnames)
+                    if (host == null) host = code;
+                    collabServerHost = host;
+                    isHosting = false;
+                    connectToCollab(host);
+                    if (editor != null) editor.getToolbar().updateCollabStatus("connected", host);
                 }
             } else {
-                // Offline
                 if (editor != null) editor.getToolbar().updateCollabStatus("offline", "");
             }
         });
@@ -275,20 +268,48 @@ public class Main extends Application {
 
     private void showRoomCodeDialog(String roomCode) {
         Alert alert = new Alert(Alert.AlertType.INFORMATION);
-        alert.setTitle("Room Code");
-        alert.setHeaderText("Share this code with your teammates:");
+        alert.setTitle("Session Started");
+        alert.setHeaderText("Your session is live. Share with teammates:");
+
+        // ── Same WiFi ──
+        Label sameWifiHeader = new Label("👥  Same WiFi (e.g. at school)");
+        sameWifiHeader.setStyle("-fx-font-weight: bold; -fx-font-size: 12px;");
 
         Label codeLabel = new Label(roomCode);
-        codeLabel.setStyle("-fx-font-size: 28px; -fx-font-weight: bold; -fx-font-family: monospace; -fx-padding: 10 0 10 0;");
+        codeLabel.setStyle("-fx-font-size: 26px; -fx-font-weight: bold; -fx-font-family: monospace; -fx-padding: 2 0 8 0;");
 
-        VBox content = new VBox(8);
+        Label sameWifiHint = new Label("Teammates enter this code in the Join field.");
+        sameWifiHint.setStyle("-fx-font-size: 11px; -fx-text-fill: #555;");
+
+        // ── Different WiFi ──
+        Label diffWifiHeader = new Label("🌐  Different WiFi (e.g. from home)");
+        diffWifiHeader.setStyle("-fx-font-weight: bold; -fx-font-size: 12px; -fx-padding: 6 0 0 0;");
+
+        Label step1 = new Label("Step 1 — Open a terminal (search 'cmd' or 'Terminal' on your computer)");
+        step1.setWrapText(true);
+
+        Label step2 = new Label("Step 2 — Run this command:");
+
+        Label sshCmd = new Label("    ssh -R 80:localhost:8765 nokey@localhost.run");
+        sshCmd.setStyle("-fx-font-family: monospace; -fx-background-color: #f0f0f0; -fx-padding: 6; -fx-font-size: 12px;");
+
+        Label step3 = new Label("Step 3 — It gives you a URL like  abc123.lhr.life\n" +
+                "          Copy that URL and send it to your teammates.\n" +
+                "          They paste it into the Join field instead of the room code.");
+        step3.setWrapText(true);
+        step3.setStyle("-fx-font-size: 11px;");
+
+        Label keepOpenNote = new Label("⚠ Keep the terminal open while your session is active.");
+        keepOpenNote.setStyle("-fx-font-size: 11px; -fx-text-fill: #c0392b; -fx-font-weight: bold;");
+
+        VBox content = new VBox(5);
         content.getChildren().addAll(
-                codeLabel,
-                new Label("Teammates select 'Join a session' and enter this code."),
-                new Label("⚠ Same WiFi only."),
-                new Label("For different networks: run  ngrok tcp 8765  and share the ngrok address instead.")
+                sameWifiHeader, codeLabel, sameWifiHint,
+                new Separator(),
+                diffWifiHeader, step1, step2, sshCmd, step3, keepOpenNote
         );
         alert.getDialogPane().setContent(content);
+        alert.getDialogPane().setPrefWidth(520);
         alert.showAndWait();
     }
 
@@ -296,21 +317,13 @@ public class Main extends Application {
 
     private void stopHosting() {
         if (!isHosting) return;
-
-        // Disconnect our own client connection
         if (editor != null) editor.disconnectCollab();
-
-        // Stop the server
         CollabServer.stopServer();
-
-        isHosting      = false;
-        activeRoomCode = null;
+        isHosting        = false;
+        activeRoomCode   = null;
         collabServerHost = null;
-
         if (editor != null) editor.getToolbar().updateCollabStatus("offline", "");
-
         primaryStage.setTitle("DocuBridge - " + currentUsername + " | " + currentFileName);
-
         Alert info = new Alert(Alert.AlertType.INFORMATION);
         info.setTitle("Session ended");
         info.setHeaderText(null);

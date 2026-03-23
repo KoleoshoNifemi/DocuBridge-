@@ -7,36 +7,42 @@ import org.java_websocket.handshake.ServerHandshake;
 import org.json.JSONArray;
 import org.json.JSONObject;
 
+import javax.net.ssl.SSLContext;
+import javax.net.ssl.TrustManager;
+import javax.net.ssl.X509TrustManager;
 import java.net.URI;
+import java.security.cert.X509Certificate;
 import java.util.function.Consumer;
 
 /**
  * CollabClient - connects one user's Editor to the CollabServer.
  *
- * Usage:
- *   CollabClient client = new CollabClient(serverUri, username, fileName, quillEngine);
- *   client.connect();
+ * Supports two connection modes automatically:
+ *   ws://  — same WiFi (room code)
+ *   wss:// — different networks via localhost.run SSH tunnel
  *
- * The editor.html page calls window.collabBridge.sendDelta(deltaJson) on every local change.
- * Incoming deltas from the server are applied via quill.updateContents() in the WebView.
+ * Same-WiFi usage:
+ *   CollabClient.create("192.168.1.5", username, fileName, engine)
+ *
+ * localhost.run usage:
+ *   Host runs: ssh -R 80:localhost:8765 nokey@localhost.run
+ *   Host shares the URL it gives (e.g. abc123.lhr.life)
+ *   Joiner enters that URL in the Join field
+ *   CollabClient.create("abc123.lhr.life", username, fileName, engine)
  */
-
 public class CollabClient extends WebSocketClient {
 
     private final String username;
     private final String fileName;
     private final WebEngine quillEngine;
 
-    // Called when the active user list changes — use to update the UI
     private Consumer<String[]> onUsersChanged;
-
-    // Flag to prevent echo: when we're applying a remote delta, don't re-send it
     private volatile boolean applyingRemote = false;
 
     public CollabClient(URI serverUri, String username, String fileName, WebEngine quillEngine) {
         super(serverUri);
-        this.username   = username;
-        this.fileName   = fileName;
+        this.username    = username;
+        this.fileName    = fileName;
         this.quillEngine = quillEngine;
     }
 
@@ -49,8 +55,6 @@ public class CollabClient extends WebSocketClient {
     @Override
     public void onOpen(ServerHandshake handshake) {
         System.out.println("✓ Connected to CollabServer");
-
-        // Announce ourselves and which file we're editing
         JSONObject joinMsg = new JSONObject();
         joinMsg.put("type",     "join");
         joinMsg.put("fileName", fileName);
@@ -62,14 +66,11 @@ public class CollabClient extends WebSocketClient {
     public void onMessage(String message) {
         try {
             JSONObject msg = new JSONObject(message);
-            String type = msg.getString("type");
-
-            switch (type) {
+            switch (msg.getString("type")) {
                 case "delta"    -> applyRemoteDelta(msg.getString("delta"), msg.getString("username"));
                 case "full"     -> applyFullContent(msg.getString("content"));
                 case "userlist" -> handleUserList(msg.getJSONArray("users"));
             }
-
         } catch (Exception e) {
             System.err.println("CollabClient message error: " + e.getMessage());
         }
@@ -87,13 +88,8 @@ public class CollabClient extends WebSocketClient {
 
     // ── Sending ───────────────────────────────────────────────────────────────
 
-    /**
-     * Called by the JS bridge (editor.html) whenever the local user makes a change.
-     * deltaJson is a Quill Delta as a JSON string, e.g. {"ops":[{"insert":"hello"}]}
-     */
     public void sendDelta(String deltaJson) {
         if (applyingRemote || !isOpen()) return;
-
         JSONObject msg = new JSONObject();
         msg.put("type",     "delta");
         msg.put("fileName", fileName);
@@ -101,13 +97,8 @@ public class CollabClient extends WebSocketClient {
         send(msg.toString());
     }
 
-    /**
-     * Send the full document content to the server so late joiners can sync.
-     * Called from Editor.java periodically (e.g. on autosave).
-     */
     public void sendFullContent(String contentJson) {
         if (!isOpen()) return;
-
         JSONObject msg = new JSONObject();
         msg.put("type",     "full");
         msg.put("fileName", fileName);
@@ -121,13 +112,12 @@ public class CollabClient extends WebSocketClient {
         Platform.runLater(() -> {
             applyingRemote = true;
             try {
-                // Escape the JSON string safely for injection into JS
                 String escaped = escapeForJs(deltaJson);
                 quillEngine.executeScript(
-                    "(function(){" +
-                    "  var delta = JSON.parse(\"" + escaped + "\");" +
-                    "  quill.updateContents(delta, 'api');" +   // 'api' source prevents re-triggering text-change
-                    "})();"
+                        "(function(){" +
+                                "  var delta = JSON.parse(\"" + escaped + "\");" +
+                                "  quill.updateContents(delta, 'api');" +
+                                "})();"
                 );
             } catch (Exception e) {
                 System.err.println("Failed to apply remote delta: " + e.getMessage());
@@ -143,10 +133,10 @@ public class CollabClient extends WebSocketClient {
             try {
                 String escaped = escapeForJs(contentJson);
                 quillEngine.executeScript(
-                    "(function(){" +
-                    "  var delta = JSON.parse(\"" + escaped + "\");" +
-                    "  quill.setContents(delta, 'api');" +
-                    "})();"
+                        "(function(){" +
+                                "  var delta = JSON.parse(\"" + escaped + "\");" +
+                                "  quill.setContents(delta, 'api');" +
+                                "})();"
                 );
                 System.out.println("✓ Synced full document from server");
             } catch (Exception e) {
@@ -159,44 +149,95 @@ public class CollabClient extends WebSocketClient {
 
     private void handleUserList(JSONArray users) {
         if (onUsersChanged == null) return;
-
         String[] userArray = new String[users.length()];
-        for (int i = 0; i < users.length(); i++) {
-            userArray[i] = users.getString(i);
-        }
-
+        for (int i = 0; i < users.length(); i++) userArray[i] = users.getString(i);
         Platform.runLater(() -> onUsersChanged.accept(userArray));
     }
 
     // ── Helpers ───────────────────────────────────────────────────────────────
 
-    public boolean isApplyingRemote() {
-        return applyingRemote;
-    }
+    public boolean isApplyingRemote() { return applyingRemote; }
 
-    /**
-     * Escapes a JSON string for safe injection into a JS string literal wrapped in double quotes.
-     */
     private static String escapeForJs(String json) {
         return json
-            .replace("\\", "\\\\")
-            .replace("\"", "\\\"")
-            .replace("\n",  "\\n")
-            .replace("\r",  "\\r")
-            .replace("\t",  "\\t");
+                .replace("\\", "\\\\")
+                .replace("\"", "\\\"")
+                .replace("\n",  "\\n")
+                .replace("\r",  "\\r")
+                .replace("\t",  "\\t");
     }
 
     // ── Factory ───────────────────────────────────────────────────────────────
 
     /**
-     * Convenience factory. serverHost is just an IP or hostname, e.g. "192.168.1.5"
+     * Creates and returns a CollabClient connected to the given host.
+     *
+     * Automatically picks the right protocol:
+     *   - "localhost" or plain IP (e.g. "192.168.1.5")  → ws://
+     *   - hostname with dots (e.g. "abc123.lhr.life")   → wss://
+     *   - host:port format (e.g. "abc123.lhr.life:443") → wss://
+     *
+     * For localhost.run, the SSH command gives you a URL like:
+     *   https://abc123.lhr.life
+     * Just paste "abc123.lhr.life" (without https://) into the Join field.
      */
     public static CollabClient create(String serverHost, String username, String fileName, WebEngine engine) {
         try {
-            URI uri = new URI("ws://" + serverHost + ":" + CollabServer.PORT);
-            return new CollabClient(uri, username, fileName, engine);
+            URI uri = buildUri(serverHost);
+            CollabClient client = new CollabClient(uri, username, fileName, engine);
+
+            // If using wss:// (localhost.run), set up SSL to trust the tunnel's cert
+            if (uri.getScheme().equals("wss")) {
+                client.setSocketFactory(buildTrustAllSSLContext().getSocketFactory());
+            }
+
+            return client;
         } catch (Exception e) {
-            throw new RuntimeException("Invalid server URI: " + e.getMessage(), e);
+            throw new RuntimeException("Could not create CollabClient: " + e.getMessage(), e);
         }
+    }
+
+    /**
+     * Builds the correct WebSocket URI from a host string.
+     *
+     * Rules:
+     *   localhost / 127.0.0.1 / plain IP  → ws://host:8765
+     *   anything else (domain name)        → wss://host:443
+     *   host:port already specified        → use as-is with correct scheme
+     */
+    private static URI buildUri(String host) throws Exception {
+        // Strip any leading protocol if someone accidentally pastes a full URL
+        host = host.replaceFirst("^https?://", "").replaceFirst("^wss?://", "").trim();
+
+        boolean hasPort   = host.contains(":");
+        boolean isLocal   = host.equals("localhost") || host.equals("127.0.0.1") || host.matches("\\d+\\.\\d+\\.\\d+\\.\\d+");
+
+        if (isLocal) {
+            // Same-WiFi / local machine — plain WebSocket
+            String portedHost = hasPort ? host : host + ":" + CollabServer.PORT;
+            return new URI("ws://" + portedHost);
+        } else {
+            // External tunnel (localhost.run, etc.) — secure WebSocket
+            // localhost.run tunnels default to port 443 for wss
+            String portedHost = hasPort ? host : host + ":443";
+            return new URI("wss://" + portedHost);
+        }
+    }
+
+    /**
+     * Builds an SSL context that trusts all certificates.
+     * Needed for localhost.run's tunnel certificates which may not be in the JVM truststore.
+     */
+    private static SSLContext buildTrustAllSSLContext() throws Exception {
+        TrustManager[] trustAll = new TrustManager[]{
+                new X509TrustManager() {
+                    public X509Certificate[] getAcceptedIssuers() { return new X509Certificate[0]; }
+                    public void checkClientTrusted(X509Certificate[] certs, String authType) {}
+                    public void checkServerTrusted(X509Certificate[] certs, String authType) {}
+                }
+        };
+        SSLContext ctx = SSLContext.getInstance("TLS");
+        ctx.init(null, trustAll, new java.security.SecureRandom());
+        return ctx;
     }
 }
