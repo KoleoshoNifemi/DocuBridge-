@@ -221,11 +221,7 @@ public class CollabServer extends WebSocketServer {
         } finally {
             instance = null;
             roomCodes.clear();
-        }} else {
-        // External tunnel (localhost.run) — connects on port 80, TLS handled by tunnel
-        String portedHost = hasPort ? host : host + ":80";
-        return new URI("ws://" + portedHost);
-    }
+        }
     }
 
     public static void main(String[] args) throws InterruptedException {
