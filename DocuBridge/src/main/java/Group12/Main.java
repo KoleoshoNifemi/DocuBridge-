@@ -173,7 +173,7 @@ public class Main extends Application {
             primaryStage.setScene(scene);
             primaryStage.setMaximized(true);
 
-            // Auto-save every 5 seconds
+            // Auto-save your document every 5 seconds
             startAutoSave();
 
             // Save on close
