@@ -269,47 +269,30 @@ public class Main extends Application {
     private void showRoomCodeDialog(String roomCode) {
         Alert alert = new Alert(Alert.AlertType.INFORMATION);
         alert.setTitle("Session Started");
-        alert.setHeaderText("Your session is live. Share with teammates:");
+        alert.setHeaderText("Share with your teammates:");
 
-        // ── Same WiFi ──
-        Label sameWifiHeader = new Label("👥  Same WiFi (e.g. at school)");
-        sameWifiHeader.setStyle("-fx-font-weight: bold; -fx-font-size: 12px;");
-
+        Label sameWifiHeader = new Label("👥  Same WiFi — Room code:");
+        sameWifiHeader.setStyle("-fx-font-weight: bold;");
         Label codeLabel = new Label(roomCode);
         codeLabel.setStyle("-fx-font-size: 26px; -fx-font-weight: bold; -fx-font-family: monospace; -fx-padding: 2 0 8 0;");
 
-        Label sameWifiHint = new Label("Teammates enter this code in the Join field.");
-        sameWifiHint.setStyle("-fx-font-size: 11px; -fx-text-fill: #555;");
-
-        // ── Different WiFi ──
-        Label diffWifiHeader = new Label("🌐  Different WiFi (e.g. from home)");
-        diffWifiHeader.setStyle("-fx-font-weight: bold; -fx-font-size: 12px; -fx-padding: 6 0 0 0;");
-
-        Label step1 = new Label("Step 1 — Open a terminal (search 'cmd' or 'Terminal' on your computer)");
-        step1.setWrapText(true);
-
-        Label step2 = new Label("Step 2 — Run this command:");
-
-        Label sshCmd = new Label("    ssh -R 80:localhost:8765 nokey@localhost.run");
-        sshCmd.setStyle("-fx-font-family: monospace; -fx-background-color: #f0f0f0; -fx-padding: 6; -fx-font-size: 12px;");
-
-        Label step3 = new Label("Step 3 — It gives you a URL like  abc123.lhr.life\n" +
-                "          Copy that URL and send it to your teammates.\n" +
-                "          They paste it into the Join field instead of the room code.");
+        Label diffWifiHeader = new Label("🌐  Different WiFi — ngrok:");
+        diffWifiHeader.setStyle("-fx-font-weight: bold; -fx-padding: 6 0 0 0;");
+        Label step1 = new Label("Step 1 — Open a terminal and run:");
+        Label ngrokCmd = new Label("    ngrok tcp 8765");
+        ngrokCmd.setStyle("-fx-font-family: monospace; -fx-background-color: #f0f0f0; -fx-padding: 6; -fx-font-size: 12px;");
+        Label step2 = new Label("Step 2 — Copy the address it shows e.g.  0.tcp.ngrok.io:12345");
+        Label step3 = new Label("Step 3 — Send that address to teammates. They paste it into the Join field.");
+        step2.setWrapText(true);
         step3.setWrapText(true);
-        step3.setStyle("-fx-font-size: 11px;");
-
-        Label keepOpenNote = new Label("⚠ Keep the terminal open while your session is active.");
-        keepOpenNote.setStyle("-fx-font-size: 11px; -fx-text-fill: #c0392b; -fx-font-weight: bold;");
+        Label keepOpen = new Label("⚠ Keep the terminal open while your session is active.");
+        keepOpen.setStyle("-fx-text-fill: #c0392b; -fx-font-weight: bold; -fx-font-size: 11px;");
 
         VBox content = new VBox(5);
-        content.getChildren().addAll(
-                sameWifiHeader, codeLabel, sameWifiHint,
-                new Separator(),
-                diffWifiHeader, step1, step2, sshCmd, step3, keepOpenNote
-        );
+        content.getChildren().addAll(sameWifiHeader, codeLabel, new Separator(),
+                diffWifiHeader, step1, ngrokCmd, step2, step3, keepOpen);
         alert.getDialogPane().setContent(content);
-        alert.getDialogPane().setPrefWidth(520);
+        alert.getDialogPane().setPrefWidth(500);
         alert.showAndWait();
     }
 
