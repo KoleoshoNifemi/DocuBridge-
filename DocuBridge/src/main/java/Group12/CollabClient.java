@@ -39,6 +39,13 @@ public class CollabClient extends WebSocketClient {
     private Consumer<String[]> onUsersChanged;
     private volatile boolean applyingRemote = false;
 
+    public CollabClient(URI serverUri, String username, String fileName, WebEngine quillEngine, java.util.Map<String, String> headers) {
+        super(serverUri, new org.java_websocket.drafts.Draft_6455(), headers);
+        this.username    = username;
+        this.fileName    = fileName;
+        this.quillEngine = quillEngine;
+    }
+
     public CollabClient(URI serverUri, String username, String fileName, WebEngine quillEngine) {
         super(serverUri);
         this.username    = username;
@@ -184,13 +191,14 @@ public class CollabClient extends WebSocketClient {
     public static CollabClient create(String serverHost, String username, String fileName, WebEngine engine) {
         try {
             URI uri = buildUri(serverHost);
-            CollabClient client = new CollabClient(uri, username, fileName, engine);
 
-            // If using wss:// (localhost.run), set up SSL to trust the tunnel's cert
-            if (uri.getScheme().equals("wss")) {
-                client.setSocketFactory(buildTrustAllSSLContext().getSocketFactory());
-            }
+            // Extract just the hostname for the Host header (strip port if present)
+            String hostHeader = serverHost.replaceFirst("^https?://", "").replaceFirst("^wss?://", "").trim();
 
+            java.util.Map<String, String> headers = new java.util.HashMap<>();
+            headers.put("Host", hostHeader);
+
+            CollabClient client = new CollabClient(uri, username, fileName, engine, headers);
             return client;
         } catch (Exception e) {
             throw new RuntimeException("Could not create CollabClient: " + e.getMessage(), e);
