@@ -217,10 +217,9 @@ public class CollabClient extends WebSocketClient {
             String portedHost = hasPort ? host : host + ":" + CollabServer.PORT;
             return new URI("ws://" + portedHost);
         } else {
-            // External tunnel (localhost.run, etc.) — secure WebSocket
-            // localhost.run tunnels default to port 443 for wss
-            String portedHost = hasPort ? host : host + ":443";
-            return new URI("wss://" + portedHost);
+            // External tunnel (localhost.run) — connects on port 80, TLS handled by tunnel
+            String portedHost = hasPort ? host : host + ":80";
+            return new URI("ws://" + portedHost);
         }
     }
 
