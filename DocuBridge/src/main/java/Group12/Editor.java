@@ -158,11 +158,11 @@ public class Editor {
         return 0.0;
     }
 
-    public Editor(String name) {
+    public Editor(String name, Runnable saveAs, Runnable save, Runnable newFile, Runnable openFile) {
         // Build all UI pieces as soon as the editor is created
         this.name = name;
         dpi = readDPI();
-        toolBar = new Toolbar(giveFunctionsNoParams(), giveFunctionsWithParams(), giveReturnFunctions());
+        toolBar = new Toolbar(giveFunctionsNoParams(saveAs, save, newFile, openFile), giveFunctionsWithParams(), giveReturnFunctions());
         initializeWebView();
         StyleContainer();
         initializeLayout();
@@ -623,11 +623,15 @@ public class Editor {
         return temp;
     }
 
-    private HashMap<String, Runnable> giveFunctionsNoParams(){
+    private HashMap<String, Runnable> giveFunctionsNoParams(Runnable saveAs, Runnable save, Runnable newFile, Runnable openFile){
         HashMap<String, Runnable> temp = new HashMap<>();
         temp.put("undo", this::undo);
         temp.put("redo", this::redo);
         temp.put("forceRepaint", this::forceRepaint);
+        if (saveAs != null) temp.put("saveAs", saveAs);
+        if (save != null) temp.put("save", save);
+        if (newFile != null) temp.put("newFile", newFile);
+        if (openFile != null) temp.put("openFile", openFile);
         return temp;
     }
 
@@ -658,12 +662,22 @@ public class Editor {
             Boolean quillReady = (Boolean) quill.executeScript("typeof quill !== 'undefined' && quill !== null");
             if (Boolean.TRUE.equals(quillReady)) {
                 Platform.runLater(() -> {
-                    // Escape the content properly for JavaScript
-                    String escaped = finalContent
-                            .replace("\\", "\\\\")
-                            .replace("\"", "\\\"")
-                            .replace("\n", "\\n");
-                    quill.executeScript("quill.setText(\"" + escaped + "\")");
+                    if (finalContent.trim().startsWith("{")) {
+                        // Delta JSON — restore full formatting
+                        String escaped = finalContent
+                                .replace("\\", "\\\\")
+                                .replace("\"", "\\\"")
+                                .replace("\r", "\\r")
+                                .replace("\n", "\\n");
+                        quill.executeScript("quill.setContents(JSON.parse(\"" + escaped + "\"))");
+                    } else {
+                        // Plain text fallback for old documents
+                        String escaped = finalContent
+                                .replace("\\", "\\\\")
+                                .replace("\"", "\\\"")
+                                .replace("\n", "\\n");
+                        quill.executeScript("quill.setText(\"" + escaped + "\")");
+                    }
                 });
             } else {
                 // Quill still not ready, try again
@@ -674,7 +688,7 @@ public class Editor {
     }
 
     public String getContent() {
-        Object result = quill.executeScript("quill.getText()");
+        Object result = quill.executeScript("JSON.stringify(quill.getContents())");
         return result != null ? result.toString() : "";
     }
 }

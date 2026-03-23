@@ -101,7 +101,7 @@ public class Main extends Application {
                     // Delete from computer - use same path as WordDocumentManager
                     String documentsFolder = System.getProperty("user.home") + java.io.File.separator + "Documents";
                     String fileName = fileToDelete.endsWith(".docx") ? fileToDelete : fileToDelete + ".docx";
-                    String filePath = documentsFolder + java.io.File.separator + fileName;
+                    String filePath = documentsFolder + java.io.File.separator + "DocuBridge" + java.io.File.separator + fileName;
 
                     java.io.File file = new java.io.File(filePath);
                     if (file.exists() && file.delete()) {
@@ -163,7 +163,7 @@ public class Main extends Application {
             // Load file content
             String content = db.getFileContent(currentUserId, currentFileName);
 
-            editor = new Editor(currentFileName);
+            editor = new Editor(currentFileName, this::saveAs, this::saveFile, this::newFile, this::openFile);
             if (content != null && !content.isEmpty()) {
                 editor.loadContent(content);
             }
@@ -185,6 +185,59 @@ public class Main extends Application {
             System.err.println("Error opening editor: " + e.getMessage());
             e.printStackTrace();
         }
+    }
+
+    private void newFile() {
+        javafx.scene.control.TextInputDialog dialog = new javafx.scene.control.TextInputDialog("");
+        dialog.setTitle("New File");
+        dialog.setHeaderText("Create a new document");
+        dialog.setContentText("File name:");
+        dialog.setGraphic(null);
+
+        java.util.Optional<String> result = dialog.showAndWait();
+        result.ifPresent(name -> {
+            if (!name.trim().isEmpty()) {
+                saveFile();
+                db.createFile(currentUserId, name.trim());
+                currentFileName = name.trim();
+                showEditor();
+            }
+        });
+    }
+
+    private void openFile() {
+        saveFile();
+        showFileSelector();
+    }
+
+    private void saveAs() {
+        javafx.scene.control.TextInputDialog dialog = new javafx.scene.control.TextInputDialog(
+                currentFileName != null ? currentFileName : "");
+        dialog.setTitle("Save As");
+        dialog.setHeaderText("Save to Documents/DocuBridge folder");
+        dialog.setContentText("File name:");
+        dialog.setGraphic(null);
+
+        java.util.Optional<String> result = dialog.showAndWait();
+        result.ifPresent(name -> {
+            if (!name.trim().isEmpty()) {
+                String newName = name.trim();
+                String content = editor != null ? editor.getContent() : "";
+
+                // Save to disk
+                WordDocumentManager.createWordFile(newName, content);
+
+                // Register in DB if it's a new filename, then save content
+                if (!newName.equals(currentFileName)) {
+                    db.createFile(currentUserId, newName);
+                }
+                db.saveFileContent(currentUserId, newName, content);
+
+                // Switch current file to the new name
+                currentFileName = newName;
+                primaryStage.setTitle("DocuBridge - " + currentUsername + " | " + currentFileName);
+            }
+        });
     }
 
     private void saveFile() {

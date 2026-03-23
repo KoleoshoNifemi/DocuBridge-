@@ -395,7 +395,29 @@ public class Toolbar {
     private Menu createFileMenu(String[] itemNames) {
         Menu menu = new Menu("File");
         for (String name : itemNames) {
-            menu.getItems().add(new MenuItem(name));
+            MenuItem item = new MenuItem(name);
+            if (name.equals("New")) {
+                item.setOnAction(event -> {
+                    Runnable fn = voidFunctions.get("newFile");
+                    if (fn != null) fn.run();
+                });
+            } else if (name.equals("Open")) {
+                item.setOnAction(event -> {
+                    Runnable fn = voidFunctions.get("openFile");
+                    if (fn != null) fn.run();
+                });
+            } else if (name.equals("Save")) {
+                item.setOnAction(event -> {
+                    Runnable fn = voidFunctions.get("save");
+                    if (fn != null) fn.run();
+                });
+            } else if (name.equals("Save As")) {
+                item.setOnAction(event -> {
+                    Runnable fn = voidFunctions.get("saveAs");
+                    if (fn != null) fn.run();
+                });
+            }
+            menu.getItems().add(item);
         }
         return menu;
     }
