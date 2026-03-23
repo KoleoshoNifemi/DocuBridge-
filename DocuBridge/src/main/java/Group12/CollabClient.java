@@ -7,28 +7,15 @@ import org.java_websocket.handshake.ServerHandshake;
 import org.json.JSONArray;
 import org.json.JSONObject;
 
-import javax.net.ssl.SSLContext;
-import javax.net.ssl.TrustManager;
-import javax.net.ssl.X509TrustManager;
 import java.net.URI;
-import java.security.cert.X509Certificate;
 import java.util.function.Consumer;
 
 /**
  * CollabClient - connects one user's Editor to the CollabServer.
  *
- * Supports two connection modes automatically:
- *   ws://  — same WiFi (room code)
- *   wss:// — different networks via localhost.run SSH tunnel
- *
- * Same-WiFi usage:
- *   CollabClient.create("192.168.1.5", username, fileName, engine)
- *
- * localhost.run usage:
- *   Host runs: ssh -R 80:localhost:8765 nokey@localhost.run
- *   Host shares the URL it gives (e.g. abc123.lhr.life)
- *   Joiner enters that URL in the Join field
- *   CollabClient.create("abc123.lhr.life", username, fileName, engine)
+ * Same-WiFi: enter room code e.g. BRIDGE-4821
+ * Different WiFi: host runs  ngrok tcp 8765  and shares the address
+ *                 e.g. 0.tcp.ngrok.io:12345 — teammates paste that into Join field.
  */
 public class CollabClient extends WebSocketClient {
 
@@ -49,8 +36,6 @@ public class CollabClient extends WebSocketClient {
     public void setOnUsersChanged(Consumer<String[]> callback) {
         this.onUsersChanged = callback;
     }
-
-    // ── WebSocketClient callbacks ─────────────────────────────────────────────
 
     @Override
     public void onOpen(ServerHandshake handshake) {
@@ -86,8 +71,6 @@ public class CollabClient extends WebSocketClient {
         System.err.println("CollabClient error: " + ex.getMessage());
     }
 
-    // ── Sending ───────────────────────────────────────────────────────────────
-
     public void sendDelta(String deltaJson) {
         if (applyingRemote || !isOpen()) return;
         JSONObject msg = new JSONObject();
@@ -105,8 +88,6 @@ public class CollabClient extends WebSocketClient {
         msg.put("content",  contentJson);
         send(msg.toString());
     }
-
-    // ── Receiving ─────────────────────────────────────────────────────────────
 
     private void applyRemoteDelta(String deltaJson, String fromUser) {
         Platform.runLater(() -> {
@@ -154,8 +135,6 @@ public class CollabClient extends WebSocketClient {
         Platform.runLater(() -> onUsersChanged.accept(userArray));
     }
 
-    // ── Helpers ───────────────────────────────────────────────────────────────
-
     public boolean isApplyingRemote() { return applyingRemote; }
 
     private static String escapeForJs(String json) {
@@ -167,77 +146,28 @@ public class CollabClient extends WebSocketClient {
                 .replace("\t",  "\\t");
     }
 
-    // ── Factory ───────────────────────────────────────────────────────────────
-
     /**
-     * Creates and returns a CollabClient connected to the given host.
+     * Builds a ws:// URI from the host string.
      *
-     * Automatically picks the right protocol:
-     *   - "localhost" or plain IP (e.g. "192.168.1.5")  → ws://
-     *   - hostname with dots (e.g. "abc123.lhr.life")   → wss://
-     *   - host:port format (e.g. "abc123.lhr.life:443") → wss://
-     *
-     * For localhost.run, the SSH command gives you a URL like:
-     *   https://abc123.lhr.life
-     * Just paste "abc123.lhr.life" (without https://) into the Join field.
+     * Handles:
+     *   "localhost"           → ws://localhost:8765       (same machine)
+     *   "192.168.1.5"         → ws://192.168.1.5:8765     (same WiFi)
+     *   "0.tcp.ngrok.io:12345"→ ws://0.tcp.ngrok.io:12345 (ngrok, port already included)
      */
     public static CollabClient create(String serverHost, String username, String fileName, WebEngine engine) {
         try {
-            URI uri = buildUri(serverHost);
-            CollabClient client = new CollabClient(uri, username, fileName, engine);
+            // Strip any accidental protocol prefix
+            serverHost = serverHost.replaceFirst("^https?://", "").replaceFirst("^wss?://", "").trim();
 
-            // If using wss:// (localhost.run), set up SSL to trust the tunnel's cert
-            if (uri.getScheme().equals("wss")) {
-                client.setSocketFactory(buildTrustAllSSLContext().getSocketFactory());
-            }
+            // If host already includes a port (e.g. ngrok gives host:port), use as-is
+            // Otherwise append the default CollabServer port
+            boolean hasPort = serverHost.contains(":");
+            String fullHost = hasPort ? serverHost : serverHost + ":" + CollabServer.PORT;
 
-            return client;
+            URI uri = new URI("ws://" + fullHost);
+            return new CollabClient(uri, username, fileName, engine);
         } catch (Exception e) {
             throw new RuntimeException("Could not create CollabClient: " + e.getMessage(), e);
         }
-    }
-
-    /**
-     * Builds the correct WebSocket URI from a host string.
-     *
-     * Rules:
-     *   localhost / 127.0.0.1 / plain IP  → ws://host:8765
-     *   anything else (domain name)        → wss://host:443
-     *   host:port already specified        → use as-is with correct scheme
-     */
-    private static URI buildUri(String host) throws Exception {
-        // Strip any leading protocol if someone accidentally pastes a full URL
-        host = host.replaceFirst("^https?://", "").replaceFirst("^wss?://", "").trim();
-
-        boolean hasPort   = host.contains(":");
-        boolean isLocal   = host.equals("localhost") || host.equals("127.0.0.1") || host.matches("\\d+\\.\\d+\\.\\d+\\.\\d+");
-
-        if (isLocal) {
-            // Same-WiFi / local machine — plain WebSocket
-            String portedHost = hasPort ? host : host + ":" + CollabServer.PORT;
-            return new URI("ws://" + portedHost);
-        } else {
-            // External tunnel (localhost.run, etc.) — secure WebSocket
-            // localhost.run tunnels default to port 443 for wss
-            String portedHost = hasPort ? host : host + ":443";
-            return new URI("wss://" + portedHost);
-        }
-    }
-
-    /**
-     * Builds an SSL context that trusts all certificates.
-     * Needed for localhost.run's tunnel certificates which may not be in the JVM truststore.
-     */
-    private static SSLContext buildTrustAllSSLContext() throws Exception {
-        TrustManager[] trustAll = new TrustManager[]{
-                new X509TrustManager() {
-                    public X509Certificate[] getAcceptedIssuers() { return new X509Certificate[0]; }
-                    public void checkClientTrusted(X509Certificate[] certs, String authType) {}
-                    public void checkServerTrusted(X509Certificate[] certs, String authType) {}
-                }
-        };
-        SSLContext ctx = SSLContext.getInstance("TLS");
-        ctx.init(null, trustAll, new java.security.SecureRandom());
-        return ctx;
     }
 }
