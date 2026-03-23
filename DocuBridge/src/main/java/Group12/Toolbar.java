@@ -20,44 +20,44 @@ import java.util.concurrent.Callable;
 import java.util.function.BiConsumer;
 
 public class Toolbar {
-    // Guard flag to prevent ComboBox action handlers from firing during programmatic updates
     private boolean isUpdatingUI = false;
 
-    private double dpi; // stores dots per inch for screen scaling
-    private VBox toolbarContainer; // holds the visual container for the toolbar
-    private HashMap<String, Runnable> voidFunctions; // keeps runnable actions that do not return values
-    private HashMap<String, BiConsumer<String, String>> formats; // keeps formatting actions keyed by name
-    private HashMap<String, Callable<Object>> returnFunctions; // keeps callable helpers that return data
-    private HashMap<String, String> rgbColor; // maps color names to css hex strings for pickers
-    private Callable<Object> getTextProperties; // callable that fetches text state from the editor
-    private int skipFormatRefreshTicks; // counts down refresh cycles to skip after user picks a value
-    private Button bold; // button that toggles bold text
-    private Button italic; // button that toggles italic text
-    private Button underline; // button that toggles underline text
-    private Button strikethrough; // button that toggles strike text
-    private Button subscript; // button that applies subscript text
-    private Button superscript; // button that applies superscript text
-    private ComboBox<String> fontTypeCombo; // dropdown for choosing font family
-    private ComboBox<Integer> fontSizeCombo; // dropdown for choosing font size
-    private ComboBox<String> alignmentCombo; // dropdown for choosing paragraph alignment
-    private ComboBox<String> headersCombo; // dropdown for choosing heading level
-    private MenuButton fontColorCombo; // menu for picking font color
-    private MenuButton highlightCombo; // menu for picking highlight color
-    private Rectangle fontColorBar; // small bar that shows chosen font color
-    private Rectangle highlightBar; // small bar that shows chosen highlight color
-    private String lastAppliedFontName; // remember last applied font to keep prompt stable while skipping refresh
-    private String lastAppliedFontSize; // remember last applied size to keep prompt stable while skipping refresh
+    private double dpi;
+    private VBox toolbarContainer;
+    private HashMap<String, Runnable> voidFunctions;
+    private HashMap<String, BiConsumer<String, String>> formats;
+    private HashMap<String, Callable<Object>> returnFunctions;
+    private HashMap<String, String> rgbColor;
+    private Callable<Object> getTextProperties;
+    private int skipFormatRefreshTicks;
+    private Button bold;
+    private Button italic;
+    private Button underline;
+    private Button strikethrough;
+    private Button subscript;
+    private Button superscript;
+    private ComboBox<String> fontTypeCombo;
+    private ComboBox<Integer> fontSizeCombo;
+    private ComboBox<String> alignmentCombo;
+    private ComboBox<String> headersCombo;
+    private MenuButton fontColorCombo;
+    private MenuButton highlightCombo;
+    private Rectangle fontColorBar;
+    private Rectangle highlightBar;
+    private String lastAppliedFontName;
+    private String lastAppliedFontSize;
 
-
-
+    // ── Collab menu item references so we can update their labels dynamically ──
+    private MenuItem collabStatusItem;   // shows "● Connected" or "○ Offline"
+    private MenuItem stopHostingItem;    // enabled only when hosting
 
     private double readDPI() {
         return Screen.getPrimary().getDpi();
     }
 
     private void displayTextProperties(){
-        Platform.runLater(() -> { // pull current formatting from the editor and refresh the toolbar buttons
-            if (skipFormatRefreshTicks > 0) { // let user selections settle before overwriting prompts
+        Platform.runLater(() -> {
+            if (skipFormatRefreshTicks > 0) {
                 skipFormatRefreshTicks--;
                 return;
             }
@@ -70,7 +70,7 @@ public class Toolbar {
 
                 Object formatObj = getFormatsCaller.call();
 
-                if (!(formatObj instanceof JSObject)) { // use defaults when the response is missing or not a javascript object
+                if (!(formatObj instanceof JSObject)) {
                     setAllUIElementsToDefaults();
                     return;
                 }
@@ -79,7 +79,7 @@ public class Toolbar {
                 updateUIFromFormats(formats);
 
             } catch (Exception e) {
-                // ignore javascript errors because the editor can change quickly
+                // ignore
             }
         });
     }
@@ -92,33 +92,28 @@ public class Toolbar {
             if (fontSizeCombo != null && lastAppliedFontSize != null) {
                 fontSizeCombo.setPromptText(lastAppliedFontSize);
             }
-            return; // skip refresh while user-applied value is settling
+            return;
         }
         isUpdatingUI = true;
-        // Update button states
 
-        // Update bold button
         if (isTruthy(formats.getMember("bold"))) {
             bold.setStyle("-fx-font-weight: bold; -fx-text-fill: #0066cc; -fx-background-color: #AAAAAA;");
         } else {
             bold.setStyle("-fx-font-weight: bold;");
         }
 
-        // Update italic button
         if (isTruthy(formats.getMember("italic"))) {
             italic.setStyle("-fx-font-style: italic; -fx-text-fill: #0066cc; -fx-background-color: #AAAAAA;");
         } else {
             italic.setStyle("-fx-font-style: italic;");
         }
 
-        // Update underline button
         if (isTruthy(formats.getMember("underline"))) {
             underline.setStyle("-fx-underline: true; -fx-text-fill: #0066cc; -fx-background-color: #AAAAAA;");
         } else {
             underline.setStyle("-fx-underline: true;");
         }
 
-        // Update subscript/superscript buttons
         Object scriptVal = formats.getMember("script");
         String scriptStr = scriptVal != null ? scriptVal.toString() : "";
 
@@ -134,27 +129,25 @@ public class Toolbar {
             superscript.setStyle("-fx-font-size: 14;");
         }
 
-        // Update strikethrough button
-         if (isTruthy(formats.getMember("strike"))) {
-             strikethrough.setStyle("-fx-background-color: #AAAAAA;");
-             if (strikethrough.getGraphic() instanceof Text) {
-                 Text strikeText = (Text) strikethrough.getGraphic();
-                 strikeText.setStyle("-fx-font-size: 14; -fx-fill: #0066cc;");
-             }
-         } else {
-             strikethrough.setStyle("");
-             if (strikethrough.getGraphic() instanceof Text) {
-                 Text strikeText = (Text) strikethrough.getGraphic();
-                 strikeText.setStyle("-fx-font-size: 14;");
-             }
-         }
+        if (isTruthy(formats.getMember("strike"))) {
+            strikethrough.setStyle("-fx-background-color: #AAAAAA;");
+            if (strikethrough.getGraphic() instanceof Text) {
+                Text strikeText = (Text) strikethrough.getGraphic();
+                strikeText.setStyle("-fx-font-size: 14; -fx-fill: #0066cc;");
+            }
+        } else {
+            strikethrough.setStyle("");
+            if (strikethrough.getGraphic() instanceof Text) {
+                Text strikeText = (Text) strikethrough.getGraphic();
+                strikeText.setStyle("-fx-font-size: 14;");
+            }
+        }
 
         Object fontVal = formats.getMember("font");
         String fontName = getStringValue(fontVal, "Arial");
         fontName = displayFontName(fontName);
         if (fontTypeCombo != null) {
-            fontTypeCombo.setPromptText(fontName); // show current font as a placeholder without altering selection
-            // Set the selected value to match the current font
+            fontTypeCombo.setPromptText(fontName);
             if (fontTypeCombo.getItems().contains(fontName)) {
                 fontTypeCombo.setValue(fontName);
             } else {
@@ -162,13 +155,12 @@ public class Toolbar {
             }
         }
 
-         Object sizeVal = formats.getMember("size");
-         if (fontSizeCombo != null) {
-             String sizeDisplay = convertSizeToPt(sizeVal);
-             fontSizeCombo.setPromptText(sizeDisplay); // show current size as a placeholder without altering selection
-         }
+        Object sizeVal = formats.getMember("size");
+        if (fontSizeCombo != null) {
+            String sizeDisplay = convertSizeToPt(sizeVal);
+            fontSizeCombo.setPromptText(sizeDisplay);
+        }
 
-        // Update font color bar
         Object colorVal = formats.getMember("color");
         String colorStr = getStringValue(colorVal, null);
         if (fontColorBar != null) {
@@ -183,7 +175,6 @@ public class Toolbar {
             }
         }
 
-        // Update highlight bar
         Object bgVal = formats.getMember("background");
         String bgStr = getStringValue(bgVal, null);
         if (highlightBar != null) {
@@ -204,7 +195,6 @@ public class Toolbar {
             String displayAlign = "Alignment";
             if (alignStr != null && !alignStr.isEmpty()) {
                 displayAlign = alignStr.substring(0, 1).toUpperCase() + alignStr.substring(1);
-                // Set the selected value to match the current alignment
                 for (String item : alignmentCombo.getItems()) {
                     if (item.equalsIgnoreCase(displayAlign)) {
                         alignmentCombo.setValue(item);
@@ -214,7 +204,7 @@ public class Toolbar {
             } else {
                 alignmentCombo.setValue(null);
             }
-            alignmentCombo.setPromptText(displayAlign); // show alignment label while leaving selection untouched
+            alignmentCombo.setPromptText(displayAlign);
         }
         isUpdatingUI = false;
 
@@ -225,11 +215,10 @@ public class Toolbar {
             if (headerStr != null && !headerStr.isEmpty() && !headerStr.equals("false")) {
                 displayHeader = "Header " + headerStr;
             }
-            headersCombo.setPromptText(displayHeader); // show header label while leaving selection untouched
+            headersCombo.setPromptText(displayHeader);
         }
     }
 
-    // Helper method to safely get a string value, with fallback default
     private String getStringValue(Object val, String defaultValue) {
         if (val == null) return defaultValue;
         String str = val.toString();
@@ -237,25 +226,22 @@ public class Toolbar {
         return str;
     }
 
-    // Helper method to convert pixel size to points
     private String convertSizeToPt(Object sizeVal) {
-         if (sizeVal == null) return "12";
-         String sizeStr = sizeVal.toString();
-         if (sizeStr.equals("undefined") || sizeStr.isEmpty()) return "12";
+        if (sizeVal == null) return "12";
+        String sizeStr = sizeVal.toString();
+        if (sizeStr.equals("undefined") || sizeStr.isEmpty()) return "12";
+        if (sizeStr.endsWith("px")) {
+            sizeStr = sizeStr.substring(0, sizeStr.length() - 2);
+        }
+        try {
+            int px = Integer.parseInt(sizeStr);
+            int pt = (int) Math.round(px * 3.0 / 4.0);
+            return String.valueOf(pt);
+        } catch (NumberFormatException e) {
+            return "12";
+        }
+    }
 
-         if (sizeStr.endsWith("px")) {
-            sizeStr = sizeStr.substring(0, sizeStr.length() - 2); // remove the px suffix so we can parse the number
-         }
-         try {
-            int px = Integer.parseInt(sizeStr); // convert the cleaned text to pixels as a whole number
-            int pt =  (int)Math.round(px * 3.0 / 4.0); // translate pixels to points for the picker display
-             return String.valueOf(pt);
-         } catch (NumberFormatException e) {
-             return "12";
-         }
-     }
-
-    // Deals with JavaScript return behaviour
     private boolean isTruthy(Object value) {
         if (value == null) return false;
         if (value instanceof Boolean) return (Boolean) value;
@@ -265,14 +251,12 @@ public class Toolbar {
 
     private void defineRGBColor(String[] colorNames, Color[] colors) {
         rgbColor = new HashMap<>();
-
-        for (int x = 0; x < colorNames.length; x++){
+        for (int x = 0; x < colorNames.length; x++) {
             if (colors[x] != null) {
-                // convert javafx color to css hex text
                 String hexColor = String.format("#%02X%02X%02X",
-                    (int) (colors[x].getRed() * 255),
-                    (int) (colors[x].getGreen() * 255),
-                    (int) (colors[x].getBlue() * 255));
+                        (int) (colors[x].getRed() * 255),
+                        (int) (colors[x].getGreen() * 255),
+                        (int) (colors[x].getBlue() * 255));
                 rgbColor.put(colorNames[x], hexColor);
             } else {
                 rgbColor.put(colorNames[x], "transparent");
@@ -283,18 +267,16 @@ public class Toolbar {
     private void createToolbar() {
         MenuBar menuBar = new MenuBar();
 
-        // MenuBar items
         menuBar.getMenus().addAll(
-                createMenu("File", new String[] {"New", "Open", "Save", "Save As"}),
-                createMenu("Edit", new String[]{"Undo", "Redo", "Find"}),
+                createMenu("File",   new String[]{"New", "Open", "Save", "Save As"}),
+                createMenu("Edit",   new String[]{"Undo", "Redo", "Find"}),
                 createMenu("Insert", new String[]{"Image", "Link", "List"}),
-                createMenu("Format", new String[]{"Align Left", "Align Center", "Align Right", "Justify"})
+                createMenu("Format", new String[]{"Align Left", "Align Center", "Align Right", "Justify"}),
+                createCollabMenu()   // ← new Collab menu
         );
 
         ToolBar formatToolbar = new ToolBar();
 
-
-        // Color data
         Color[] colors = {null, Color.YELLOW, Color.LIME, Color.CYAN, Color.MAGENTA, Color.BLUE,
                 Color.RED, Color.NAVY, Color.TEAL, Color.GREEN, Color.PURPLE,
                 Color.MAROON, Color.GRAY, Color.SILVER, Color.BLACK, Color.WHITE};
@@ -302,18 +284,16 @@ public class Toolbar {
                 "Red", "Navy", "Teal", "Green", "Purple", "Maroon", "Gray", "Silver", "Black", "White"};
         defineRGBColor(names, colors);
 
-
-        // ToolBar buttons
         formatToolbar.getItems().addAll(
                 createButton("Undo", "-fx-font-size: 14;", "undo", null, null),
                 createButton("Redo", "-fx-font-size: 14;", "redo", null, null),
                 createSeparator(),
-                bold = (createButton("B", "-fx-font-weight: bold;", "format", "bold", "user")),
-                italic = (createButton("I", "-fx-font-style: italic;", "format", "italic", "user")),
-                underline = (createButton("U", "-fx-underline: true;", "format", "underline", "user")),
+                bold         = createButton("B", "-fx-font-weight: bold;", "format", "bold", "user"),
+                italic       = createButton("I", "-fx-font-style: italic;", "format", "italic", "user"),
+                underline    = createButton("U", "-fx-underline: true;", "format", "underline", "user"),
                 createSeparator(),
-                subscript = (createButton("Aₓ", "-fx-font-size: 14;", "applyScript", "sub", "user")),
-                superscript = (createButton("Aˣ", "-fx-font-size: 14;", "applyScript", "super", "user")),
+                subscript    = createButton("Aₓ", "-fx-font-size: 14;", "applyScript", "sub", "user"),
+                superscript  = createButton("Aˣ", "-fx-font-size: 14;", "applyScript", "super", "user"),
                 strikethrough = createStrikethroughButton(),
                 createSeparator(),
                 fontTypeCombo = createFontTypeOptions(),
@@ -323,7 +303,7 @@ public class Toolbar {
                 createHighlightContainer(colors, names),
                 createSeparator(),
                 alignmentCombo = createAlignmentOptions(),
-                headersCombo = createHeadersOptions(),
+                headersCombo   = createHeadersOptions(),
                 createSeparator(),
                 createTranslationMenu()
         );
@@ -331,24 +311,81 @@ public class Toolbar {
         toolbarContainer = new VBox(menuBar, formatToolbar);
     }
 
+    // ── Collab Menu ───────────────────────────────────────────────────────────
+
+    private Menu createCollabMenu() {
+        Menu menu = new Menu("Collab");
+
+        // Status indicator — read-only, just shows current state
+        collabStatusItem = new MenuItem("○ Offline");
+        collabStatusItem.setDisable(true);  // not clickable, just informational
+
+        SeparatorMenuItem sep1 = new SeparatorMenuItem();
+
+        // Open the collab setup dialog (host / join / offline)
+        MenuItem openCollabItem = new MenuItem("Session settings…");
+        openCollabItem.setOnAction(e -> {
+            Runnable fn = voidFunctions.get("showCollabDialog");
+            if (fn != null) fn.run();
+        });
+
+        SeparatorMenuItem sep2 = new SeparatorMenuItem();
+
+        // Stop hosting — only enabled when this user is the host
+        stopHostingItem = new MenuItem("Stop hosting");
+        stopHostingItem.setDisable(true);
+        stopHostingItem.setOnAction(e -> {
+            Runnable fn = voidFunctions.get("stopHosting");
+            if (fn != null) fn.run();
+        });
+
+        // Disconnect from a session (when joined as a client)
+        MenuItem disconnectItem = new MenuItem("Disconnect");
+        disconnectItem.setOnAction(e -> {
+            Runnable fn = voidFunctions.get("disconnectCollab");
+            if (fn != null) fn.run();
+        });
+
+        menu.getItems().addAll(collabStatusItem, sep1, openCollabItem, sep2, stopHostingItem, disconnectItem);
+        return menu;
+    }
+
+    /**
+     * Called by Main.java to update the Collab menu status label and button states.
+     * @param status  One of: "offline", "hosting", "connected"
+     * @param details Extra info shown in the label (e.g. room code, or host IP)
+     */
+    public void updateCollabStatus(String status, String details) {
+        Platform.runLater(() -> {
+            switch (status) {
+                case "hosting" -> {
+                    collabStatusItem.setText("● Hosting  —  code: " + details);
+                    stopHostingItem.setDisable(false);
+                }
+                case "connected" -> {
+                    collabStatusItem.setText("● Connected  →  " + details);
+                    stopHostingItem.setDisable(true);
+                }
+                case "offline" -> {
+                    collabStatusItem.setText("○ Offline");
+                    stopHostingItem.setDisable(true);
+                }
+            }
+        });
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
 
     private Separator createSeparator() {
         return new Separator(Orientation.VERTICAL);
     }
 
-    // Create Menu with items
     private Menu createMenu(String menuName, String[] itemNames) {
-        if (menuName.equals("Edit")) {
-            return createEditMenu(itemNames);
-        } else if (menuName.equals("Format")) {
-            return createFormatMenu(itemNames);
-        } else if (menuName.equals("File")) {
-            return createFileMenu(itemNames);
-        } else if (menuName.equals("Insert")) {
-            return createInsertMenu(itemNames);
-        } else {
-            return createDefaultMenu(menuName, itemNames);
-        }
+        if (menuName.equals("Edit"))   return createEditMenu(itemNames);
+        if (menuName.equals("Format")) return createFormatMenu(itemNames);
+        if (menuName.equals("File"))   return createFileMenu(itemNames);
+        if (menuName.equals("Insert")) return createInsertMenu(itemNames);
+        return createDefaultMenu(menuName, itemNames);
     }
 
     private Menu createEditMenu(String[] itemNames) {
@@ -357,20 +394,15 @@ public class Toolbar {
             MenuItem item = new MenuItem(name);
             if (name.equals("Undo")) {
                 item.setOnAction(event -> {
-                    Runnable undoFn = voidFunctions.get("undo");
-                    if (undoFn != null) {
-                        undoFn.run();
-                    }
+                    Runnable fn = voidFunctions.get("undo");
+                    if (fn != null) fn.run();
                 });
             } else if (name.equals("Redo")) {
                 item.setOnAction(event -> {
-                    Runnable redoFn = voidFunctions.get("redo");
-                    if (redoFn != null) {
-                        redoFn.run();
-                    }
+                    Runnable fn = voidFunctions.get("redo");
+                    if (fn != null) fn.run();
                 });
             }
-            // Skip Find because no action is set
             menu.getItems().add(item);
         }
         return menu;
@@ -397,25 +429,13 @@ public class Toolbar {
         for (String name : itemNames) {
             MenuItem item = new MenuItem(name);
             if (name.equals("New")) {
-                item.setOnAction(event -> {
-                    Runnable fn = voidFunctions.get("newFile");
-                    if (fn != null) fn.run();
-                });
+                item.setOnAction(event -> { Runnable fn = voidFunctions.get("newFile"); if (fn != null) fn.run(); });
             } else if (name.equals("Open")) {
-                item.setOnAction(event -> {
-                    Runnable fn = voidFunctions.get("openFile");
-                    if (fn != null) fn.run();
-                });
+                item.setOnAction(event -> { Runnable fn = voidFunctions.get("openFile"); if (fn != null) fn.run(); });
             } else if (name.equals("Save")) {
-                item.setOnAction(event -> {
-                    Runnable fn = voidFunctions.get("save");
-                    if (fn != null) fn.run();
-                });
+                item.setOnAction(event -> { Runnable fn = voidFunctions.get("save"); if (fn != null) fn.run(); });
             } else if (name.equals("Save As")) {
-                item.setOnAction(event -> {
-                    Runnable fn = voidFunctions.get("saveAs");
-                    if (fn != null) fn.run();
-                });
+                item.setOnAction(event -> { Runnable fn = voidFunctions.get("saveAs"); if (fn != null) fn.run(); });
             }
             menu.getItems().add(item);
         }
@@ -426,34 +446,24 @@ public class Toolbar {
         Menu menu = new Menu("Insert");
         for (String name : itemNames) {
             if (name.equals("List")) {
-                // make a submenu for list types to keep the list options together
                 Menu listSubmenu = new Menu("List");
-
                 MenuItem bulletedList = new MenuItem("Bulleted List");
                 bulletedList.setOnAction(event -> {
-                    BiConsumer<String, String> listFormatter = formats.get("insertList");
-                    if (listFormatter != null) {
-                        listFormatter.accept("bullet", "user");
-                    }
+                    BiConsumer<String, String> fn = formats.get("insertList");
+                    if (fn != null) fn.accept("bullet", "user");
                 });
-
                 MenuItem numberedList = new MenuItem("Numbered List");
                 numberedList.setOnAction(event -> {
-                    BiConsumer<String, String> listFormatter = formats.get("insertList");
-                    if (listFormatter != null) {
-                        listFormatter.accept("ordered", "user");
-                    }
+                    BiConsumer<String, String> fn = formats.get("insertList");
+                    if (fn != null) fn.accept("ordered", "user");
                 });
-
                 listSubmenu.getItems().addAll(bulletedList, numberedList);
                 menu.getItems().add(listSubmenu);
             } else if (name.equals("Image")) {
                 MenuItem imageItem = new MenuItem("Image");
                 imageItem.setOnAction(event -> {
-                    BiConsumer<String, String> imageFormatter = formats.get("insertImage");
-                    if (imageFormatter != null) {
-                        imageFormatter.accept("", "user");
-                    }
+                    BiConsumer<String, String> fn = formats.get("insertImage");
+                    if (fn != null) fn.accept("", "user");
                 });
                 menu.getItems().add(imageItem);
             } else {
@@ -465,13 +475,11 @@ public class Toolbar {
 
     private Menu createDefaultMenu(String menuName, String[] itemNames) {
         Menu menu = new Menu(menuName);
-        for (String name : itemNames) {
-            menu.getItems().add(new MenuItem(name));
-        }
+        for (String name : itemNames) menu.getItems().add(new MenuItem(name));
         return menu;
     }
 
-    private ComboBox<Integer> createFontSizeOptions(){
+    private ComboBox<Integer> createFontSizeOptions() {
         ComboBox<Integer> fontSizeCombo = new ComboBox<>();
         fontSizeCombo.getItems().addAll(8, 9, 10, 11, 12, 14, 16, 18, 24, 30, 36, 48, 60, 72);
         fontSizeCombo.setEditable(true);
@@ -482,26 +490,19 @@ public class Toolbar {
 
         fontSizeCombo.setOnAction(e -> {
             Object value = fontSizeCombo.getValue();
-
             Integer size = null;
-
             if (value instanceof Integer) {
                 size = (Integer) value;
             } else if (value instanceof String) {
-                try {
-                    size = Integer.parseInt(((String) value).trim());
-                } catch (NumberFormatException ex) {
-                    fontSizeCombo.getEditor().clear();
-                    return;
+                try { size = Integer.parseInt(((String) value).trim()); } catch (NumberFormatException ex) {
+                    fontSizeCombo.getEditor().clear(); return;
                 }
             }
-
             if (size != null) {
                 int px = (int) Math.round(size * 4.0 / 3.0);
-                skipFormatRefreshTicks = 10; // skip more poll cycles to so applied value sticks
+                skipFormatRefreshTicks = 10;
                 formats.get("setFontSize").accept(px + "px", "user");
-                fontSizeCombo.setPromptText(String.valueOf(size)); // show last applied size
-                // Clear selection after the event to avoid ListView index errors and allow reselection of the same size
+                fontSizeCombo.setPromptText(String.valueOf(size));
                 Platform.runLater(() -> {
                     fontSizeCombo.getSelectionModel().clearSelection();
                     fontSizeCombo.setValue(null);
@@ -511,73 +512,59 @@ public class Toolbar {
         return fontSizeCombo;
     }
 
-    private ComboBox<String> createFontTypeOptions(){
+    private ComboBox<String> createFontTypeOptions() {
         ComboBox<String> fontType = new ComboBox<>();
         fontType.getItems().addAll("Arial", "Courier New", "Georgia", "Times New Roman");
         fontType.setPrefWidth(100);
         fontType.setPromptText("Font");
-
         fontType.setOnAction(e -> {
             if (isUpdatingUI) return;
             String value = fontType.getValue();
             if (value != null && !value.isEmpty()) {
                 BiConsumer<String, String> format = formats.get("setFontType");
                 if (format != null) {
-                    skipFormatRefreshTicks = 10; // skip more poll cycles so applied value sticks
-                    String normalized = normalizeFontValue(value);
-                    format.accept(normalized, "user");
-                    fontType.setPromptText(value); // keep last applied font visible as prompt
+                    skipFormatRefreshTicks = 10;
+                    format.accept(normalizeFontValue(value), "user");
+                    fontType.setPromptText(value);
                 }
             }
         });
         return fontType;
     }
 
-    private ComboBox<String> createAlignmentOptions(){
+    private ComboBox<String> createAlignmentOptions() {
         ComboBox<String> alignment = new ComboBox<>();
         alignment.getItems().addAll("Left", "Center", "Right", "Justify");
         alignment.setPrefWidth(110);
         alignment.setPromptText("Alignment");
-
         alignment.setOnAction(e -> {
             if (isUpdatingUI) return;
             String value = alignment.getValue();
             if (value != null && !value.isEmpty()) {
                 BiConsumer<String, String> format = formats.get("setTextAlignment");
                 if (format != null) {
-                    skipFormatRefreshTicks = 10; // skip more poll cycles so applied value sticks
+                    skipFormatRefreshTicks = 10;
                     format.accept(value.toLowerCase(), "user");
-                    alignment.setPromptText(value); // show last applied alignment
+                    alignment.setPromptText(value);
                 }
             }
         });
         return alignment;
     }
 
-    private ComboBox<String> createHeadersOptions(){
+    private ComboBox<String> createHeadersOptions() {
         ComboBox<String> headersCombo = new ComboBox<>();
         headersCombo.getItems().addAll("No Header", "Header 1", "Header 2", "Header 3", "Header 4", "Header 5", "Header 6");
         headersCombo.setPrefWidth(110);
         headersCombo.setPromptText("Headers");
-
         headersCombo.setOnAction(event -> {
             String selected = headersCombo.getValue();
             if (selected != null) {
-                BiConsumer<String, String> setHeaderFn = formats.get("setHeader");
-                if (setHeaderFn != null) {
-                    if (selected.equals("No Header")) {
-                        setHeaderFn.accept("none", "user");
-                    } else {
-                        String level = selected.replace("Header ", "");
-                        setHeaderFn.accept(level, "user");
-                    }
-                    // Defer clearing to allow JavaFX internal state to settle
+                BiConsumer<String, String> fn = formats.get("setHeader");
+                if (fn != null) {
+                    fn.accept(selected.equals("No Header") ? "none" : selected.replace("Header ", ""), "user");
                     Platform.runLater(() -> {
-                        try {
-                            headersCombo.setValue(null);
-                        } catch (Exception ex) {
-                            // Ignore IndexOutOfBoundsException from internal JavaFX ListView
-                        }
+                        try { headersCombo.setValue(null); } catch (Exception ex) {}
                     });
                 }
             }
@@ -585,34 +572,20 @@ public class Toolbar {
         return headersCombo;
     }
 
-    private MenuButton createTranslationMenu(){
+    private MenuButton createTranslationMenu() {
         MenuButton translationMenu = new MenuButton("Translation");
         translationMenu.setStyle("-fx-font-size: 14;");
-
-        String[] languages = {
-                "No Translation",
-                "French",
-                "German",
-                "Greek",
-                "Portuguese",
-                "Spanish",
-        };
-
+        String[] languages = {"No Translation", "French", "German", "Greek", "Portuguese", "Spanish"};
         for (String language : languages) {
             MenuItem langItem = new MenuItem(language);
             langItem.setOnAction(event -> {
-                if (language.equals("No Translation")) {
-                    // Placeholder for clearing translation
-                } else {
-                    BiConsumer<String, String> translateFn = formats.get("translate");
-                    if (translateFn != null) {
-                        //
-                    }
+                if (!language.equals("No Translation")) {
+                    BiConsumer<String, String> fn = formats.get("translate");
+                    if (fn != null) { /* translation logic */ }
                 }
             });
             translationMenu.getItems().add(langItem);
         }
-
         return translationMenu;
     }
 
@@ -637,14 +610,10 @@ public class Toolbar {
 
     private void setButtonActions(Button button, String functionName, String param1, String param2) {
         if (voidFunctions.containsKey(functionName)) {
-            button.setOnAction(event -> {
-                Runnable function = voidFunctions.get(functionName);
-                function.run();
-            });
+            button.setOnAction(event -> voidFunctions.get(functionName).run());
         } else {
             button.setOnAction(event -> {
                 BiConsumer<String, String> format = formats.get(functionName);
-                // Get the current format state
                 try {
                     Callable<Object> getFormatsCaller = returnFunctions.get("getFormats");
                     if (getFormatsCaller != null) {
@@ -652,26 +621,17 @@ public class Toolbar {
                         if (formatObj instanceof JSObject) {
                             JSObject currentFormats = (JSObject) formatObj;
                             Object currentValue = currentFormats.getMember(param1);
-
-                            // If the format is already active, toggle it off
                             if (isTruthy(currentValue)) {
                                 format.accept(param1, "user");
-                                // Immediately update button style to show it's inactive
                                 resetButtonStyle(button, param1);
                             } else {
-                                // Otherwise apply the format
                                 format.accept(param1, param2);
-                                // Immediately update button style to show it's active
                                 highlightButtonStyle(button, param1);
                             }
                             return;
                         }
                     }
-                } catch (Exception e) {
-                    // Fall through to default behavior
-                }
-
-                // Fallback: just apply the format
+                } catch (Exception e) {}
                 format.accept(param1, param2);
             });
         }
@@ -680,14 +640,10 @@ public class Toolbar {
     private void highlightButtonStyle(Button button, String formatType) {
         String baseStyle = button.getStyle();
         if (baseStyle == null) baseStyle = "";
-
-        // Special handling for strikethrough button with Text graphic
         if (formatType.equals("strike") && button.getGraphic() instanceof Text) {
-            Text strikeText = (Text) button.getGraphic();
-            strikeText.setStyle("-fx-font-size: 14; -fx-fill: #0066cc;");
+            ((Text) button.getGraphic()).setStyle("-fx-font-size: 14; -fx-fill: #0066cc;");
             button.setStyle("-fx-background-color: #AAAAAA;");
         } else {
-            // Add active styling
             if (!baseStyle.contains("-fx-background-color")) {
                 button.setStyle(baseStyle + "; -fx-text-fill: #0066cc; -fx-background-color: #AAAAAA;");
             }
@@ -695,77 +651,44 @@ public class Toolbar {
     }
 
     private void resetButtonStyle(Button button, String formatType) {
-        // Reset to base style without the highlight
         if (formatType.equals("strike") && button.getGraphic() instanceof Text) {
-            Text strikeText = (Text) button.getGraphic();
-            strikeText.setStyle("-fx-font-size: 14;");
+            ((Text) button.getGraphic()).setStyle("-fx-font-size: 14;");
             button.setStyle("");
         } else {
-            switch(formatType) {
-                case "bold":
-                    button.setStyle("-fx-font-weight: bold;");
-                    break;
-                case "italic":
-                    button.setStyle("-fx-font-style: italic;");
-                    break;
-                case "underline":
-                    button.setStyle("-fx-underline: true;");
-                    break;
-                case "sub":
-                    button.setStyle("-fx-font-size: 14;");
-                    break;
-                case "super":
-                    button.setStyle("-fx-font-size: 14;");
-                    break;
-                default:
-                    button.setStyle("");
+            switch (formatType) {
+                case "bold"      -> button.setStyle("-fx-font-weight: bold;");
+                case "italic"    -> button.setStyle("-fx-font-style: italic;");
+                case "underline" -> button.setStyle("-fx-underline: true;");
+                case "sub", "super" -> button.setStyle("-fx-font-size: 14;");
+                default          -> button.setStyle("");
             }
         }
     }
 
     private void setAllUIElementsToDefaults() {
-        // Reset all buttons to default state
         bold.setStyle("-fx-font-weight: bold;");
         italic.setStyle("-fx-font-style: italic;");
         underline.setStyle("-fx-underline: true;");
         strikethrough.setStyle("");
         subscript.setStyle("-fx-font-size: 14;");
         superscript.setStyle("-fx-font-size: 14;");
-
-        // Reset color bars to defaults
-        if (fontColorBar != null) {
-            fontColorBar.setFill(Color.BLACK);
-        }
-        if (highlightBar != null) {
-            highlightBar.setFill(Color.TRANSPARENT);
-        }
-
-        // Reset all combos to default prompts (don't touch values to avoid crashes)
-        if (fontTypeCombo != null) {
-            fontTypeCombo.setPromptText("Arial");
-        }
-        if (fontSizeCombo != null) {
-            fontSizeCombo.setPromptText("12");
-        }
-        if (alignmentCombo != null) {
-            alignmentCombo.setPromptText("Alignment");
-        }
-        if (headersCombo != null) {
-            headersCombo.setPromptText("Headers");
-        }
+        if (fontColorBar  != null) fontColorBar.setFill(Color.BLACK);
+        if (highlightBar  != null) highlightBar.setFill(Color.TRANSPARENT);
+        if (fontTypeCombo != null) fontTypeCombo.setPromptText("Arial");
+        if (fontSizeCombo != null) fontSizeCombo.setPromptText("12");
+        if (alignmentCombo != null) alignmentCombo.setPromptText("Alignment");
+        if (headersCombo  != null) headersCombo.setPromptText("Headers");
     }
 
     public Toolbar(HashMap<String, Runnable> voidFunctions,
                    HashMap<String, BiConsumer<String, String>> formats,
-                   HashMap<String, Callable<Object>> returnFunctions
-                  ) {
+                   HashMap<String, Callable<Object>> returnFunctions) {
         dpi = readDPI();
-        this.voidFunctions = voidFunctions;
-        this.formats = formats;
+        this.voidFunctions   = voidFunctions;
+        this.formats         = formats;
         this.returnFunctions = returnFunctions;
         createToolbar();
 
-        // Delay timeline start to allow Quill to fully initialize
         Timeline delayTimeline = new Timeline(new KeyFrame(Duration.millis(1000), event -> {
             Timeline updateTimeline = new Timeline(new KeyFrame(Duration.millis(200), e -> displayTextProperties()));
             updateTimeline.setCycleCount(Timeline.INDEFINITE);
@@ -780,29 +703,23 @@ public class Toolbar {
 
     private VBox createFontColorContainer(Color[] colors, String[] names) {
         fontColorCombo = createFontColorCombo(colors, names);
-
         fontColorBar = new Rectangle(100, 4);
         fontColorBar.setFill(Color.BLACK);
         fontColorBar.setStyle("-fx-stroke: #CCCCCC; -fx-stroke-width: 0.5;");
-
         VBox container = new VBox(0);
         container.setStyle("-fx-alignment: top-center;");
         container.getChildren().addAll(fontColorCombo, fontColorBar);
-
         return container;
     }
 
     private VBox createHighlightContainer(Color[] colors, String[] names) {
         highlightCombo = createHighlightCombo(colors, names);
-
         highlightBar = new Rectangle(100, 4);
         highlightBar.setFill(Color.TRANSPARENT);
         highlightBar.setStyle("-fx-stroke: #CCCCCC; -fx-stroke-width: 0.5;");
-
         VBox container = new VBox(0);
         container.setStyle("-fx-alignment: top-center;");
         container.getChildren().addAll(highlightCombo, highlightBar);
-
         return container;
     }
 
@@ -810,49 +727,35 @@ public class Toolbar {
         MenuButton colorMenu = new MenuButton("Font Color");
         colorMenu.setPrefWidth(100);
         colorMenu.setStyle("-fx-font-size: 14;");
-
-        // Create color grid
         GridPane colorGrid = new GridPane();
-        colorGrid.setHgap(5);
-        colorGrid.setVgap(5);
+        colorGrid.setHgap(5); colorGrid.setVgap(5);
         colorGrid.setStyle("-fx-padding: 10; -fx-background-color: white;");
-
-        int index = 1;  // Skip "No Color"
+        int index = 1;
         for (int row = 0; row < 3; row++) {
             for (int col = 0; col < 5; col++) {
                 if (index < colors.length) {
                     Color color = colors[index] == null ? Color.TRANSPARENT : colors[index];
                     String colorName = names[index];
-
-                    // Create color button with rectangle
                     Rectangle colorRect = new Rectangle(30, 30);
                     colorRect.setFill(color);
-
                     Button colorButton = new Button();
                     colorButton.setGraphic(colorRect);
                     colorButton.setFocusTraversable(false);
                     colorButton.setStyle("-fx-padding: 2; -fx-focus-color: transparent; -fx-faint-focus-color: transparent;");
                     colorButton.setTooltip(new Tooltip(colorName));
-
-                    // Set button action
                     colorButton.setOnAction(e -> {
                         BiConsumer<String, String> format = formats.get("setFontColor");
-                        if (format != null) {
-                            format.accept(rgbColor.get(colorName), "user");
-                        }
+                        if (format != null) format.accept(rgbColor.get(colorName), "user");
                         colorMenu.hide();
                     });
-
                     colorGrid.add(colorButton, col, row);
                     index++;
                 }
             }
         }
-
         CustomMenuItem colorMenuItem = new CustomMenuItem(colorGrid);
         colorMenuItem.setHideOnClick(false);
         colorMenu.getItems().add(colorMenuItem);
-
         return colorMenu;
     }
 
@@ -860,75 +763,47 @@ public class Toolbar {
         MenuButton highlightMenu = new MenuButton("Highlight");
         highlightMenu.setPrefWidth(100);
         highlightMenu.setStyle("-fx-font-size: 14;");
-
-        // Create color grid
         GridPane colorGrid = new GridPane();
-        colorGrid.setHgap(5);
-        colorGrid.setVgap(5);
+        colorGrid.setHgap(5); colorGrid.setVgap(5);
         colorGrid.setStyle("-fx-padding: 10; -fx-background-color: white;");
-
-        int index = 1;  // Skip "No Color"
+        int index = 1;
         for (int row = 0; row < 3; row++) {
             for (int col = 0; col < 5; col++) {
                 if (index < colors.length) {
-                    // Skip white for highlight menu
-                    if (index == colors.length - 1) {
-                        break;
-                    }
-
+                    if (index == colors.length - 1) break;
                     Color color = colors[index] == null ? Color.TRANSPARENT : colors[index];
                     String colorName = names[index];
-
-                    // Create color button with rectangle
                     Rectangle colorRect = new Rectangle(30, 30);
                     colorRect.setFill(color);
-
                     Button colorButton = new Button();
                     colorButton.setGraphic(colorRect);
                     colorButton.setFocusTraversable(false);
                     colorButton.setStyle("-fx-padding: 2; -fx-focus-color: transparent; -fx-faint-focus-color: transparent;");
                     colorButton.setTooltip(new Tooltip(colorName));
-
-                    // Set button action
                     colorButton.setOnAction(e -> {
                         BiConsumer<String, String> format = formats.get("setHighlightColor");
-                        if (format != null) {
-                            format.accept(rgbColor.get(colorName), "user");
-                        }
+                        if (format != null) format.accept(rgbColor.get(colorName), "user");
                         highlightMenu.hide();
                     });
-
                     colorGrid.add(colorButton, col, row);
                     index++;
                 }
             }
         }
-
         CustomMenuItem colorMenuItem = new CustomMenuItem(colorGrid);
         colorMenuItem.setHideOnClick(false);
         highlightMenu.getItems().add(colorMenuItem);
-
         return highlightMenu;
     }
 
-    // Helper to normalize font value for Quill (must match whitelist exactly)
     private String normalizeFontValue(String value) {
-        // Quill expects exact match to whitelist: 'Arial', 'Courier New', 'Georgia', 'Times New Roman'
-        // So just return as-is, but trim and handle nulls
         if (value == null) return "Arial";
-        value = value.trim();
-        // Defensive: fallback to Arial if not in list
-        switch (value.toLowerCase()) {
-            case "arial":
-                return "Arial";
-            case "courier new":
-                return "Courier New";
-            case "georgia":
-                return "Georgia";
-            case "times new roman":
-                return "Times New Roman";
-            default:
-                return "Arial";
+        switch (value.trim().toLowerCase()) {
+            case "arial":           return "Arial";
+            case "courier new":     return "Courier New";
+            case "georgia":         return "Georgia";
+            case "times new roman": return "Times New Roman";
+            default:                return "Arial";
         }
     }
 
@@ -936,7 +811,6 @@ public class Toolbar {
         if (fontValue == null) return "Arial";
         String cleaned = fontValue.trim();
         if (cleaned.isEmpty()) return "Arial";
-        // Convert quill whitelist values back to readable names
         String display = cleaned.replace('-', ' ');
         return display.substring(0, 1).toUpperCase() + display.substring(1);
     }

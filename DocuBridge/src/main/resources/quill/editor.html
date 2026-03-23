@@ -281,6 +281,24 @@
     setTimeout(function() {
         quill.focus();
     }, 200);
+
+    (function () {
+        window.collabBridge = {
+            javaClient: null,
+            sendDelta: function (deltaJson) {
+                if (this.javaClient) {
+                    this.javaClient.sendDelta(deltaJson);
+                }
+            }
+        };
+
+        quill.on('text-change', function (delta, oldDelta, source) {
+            if (source === 'user') {
+                var deltaJson = JSON.stringify(delta);
+                window.collabBridge.sendDelta(deltaJson);
+            }
+        });
+    })();
 </script>
 </body>
 </html>

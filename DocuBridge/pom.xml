@@ -87,6 +87,13 @@
             <artifactId>json</artifactId>
             <version>20230227</version>
         </dependency>
+
+        <!-- WebSocket library for real-time collaboration -->
+        <dependency>
+            <groupId>org.java-websocket</groupId>
+            <artifactId>Java-WebSocket</artifactId>
+            <version>1.5.4</version>
+        </dependency>
     </dependencies>
 
     <build>
