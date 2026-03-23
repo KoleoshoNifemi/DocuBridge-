@@ -40,6 +40,7 @@ public class Editor {
     private CollabClient collabClient;
     private String serverHost;
     private String username;
+    private boolean bridgeAttached = false;
     // ─────────────────────────────────────────────────────────────
 
     private double readDPI() {
@@ -69,16 +70,43 @@ public class Editor {
                 clipboardHandler = new ClipboardHandler(webView);
                 initializeShortcuts();
 
-                // ── Collab: wire up the JS bridge once Quill is ready ──
+                // Mark window as ready for bridge attachment
                 JSObject win = (JSObject) quill.executeScript("window");
                 win.setMember("collabBridgeReady", true);
-                if (collabClient != null) attachJsBridge();
-                // ──────────────────────────────────────────────────────
+
+                // Start polling — attaches bridge as soon as collabClient connects
+                bridgeAttached = false;
+                scheduleAttachBridge();
+
             } else {
                 waitForQuillReady();
             }
         });
         pause.play();
+    }
+
+    /**
+     * Polls every 200ms on the JavaFX thread until both:
+     *   1. window.collabBridge exists (editor.html script has run), AND
+     *   2. collabClient is connected
+     * Then attaches the Java client to the JS bridge.
+     */
+    private void scheduleAttachBridge() {
+        if (bridgeAttached) return; // already done, stop polling
+
+        PauseTransition check = new PauseTransition(Duration.millis(200));
+        check.setOnFinished(e -> {
+            if (bridgeAttached) return;
+
+            if (collabClient != null && collabClient.isOpen()) {
+                // Both sides ready — attach now
+                attachJsBridge();
+            } else {
+                // Keep waiting
+                scheduleAttachBridge();
+            }
+        });
+        check.play();
     }
 
     private void StyleContainer() {
@@ -152,16 +180,19 @@ public class Editor {
     public void enableCollab(String serverHost, String username, Consumer<String[]> onUsersChanged) {
         this.serverHost = serverHost;
         this.username   = username;
+        bridgeAttached  = false;
 
         collabClient = CollabClient.create(serverHost, username, name, quill);
         if (onUsersChanged != null) collabClient.setOnUsersChanged(onUsersChanged);
 
+        // Connect on background thread — scheduleAttachBridge() will pick it up when ready
         new Thread(() -> {
             try {
                 boolean connected = collabClient.connectBlocking();
                 if (connected) {
                     System.out.println("✓ Collab connected to " + serverHost);
-                    attachJsBridge();
+                    // scheduleAttachBridge() running on JavaFX thread will detect the connection
+                    // and call attachJsBridge() automatically
                 } else {
                     System.err.println("✗ Could not connect to CollabServer at " + serverHost);
                 }
@@ -178,15 +209,21 @@ public class Editor {
                 if (Boolean.TRUE.equals(ready)) {
                     JSObject bridge = (JSObject) quill.executeScript("window.collabBridge");
                     bridge.setMember("javaClient", collabClient);
+                    bridgeAttached = true;
                     System.out.println("✓ JS collab bridge attached");
+                } else {
+                    // collabBridge not in page yet — keep polling
+                    scheduleAttachBridge();
                 }
             } catch (Exception e) {
                 System.err.println("Failed to attach JS bridge: " + e.getMessage());
+                scheduleAttachBridge();
             }
         });
     }
 
     public void disconnectCollab() {
+        bridgeAttached = false;
         if (collabClient != null && collabClient.isOpen()) {
             try { collabClient.closeBlocking(); } catch (InterruptedException ignored) {}
         }
@@ -201,7 +238,6 @@ public class Editor {
         return collabClient;
     }
 
-    /** Exposes the toolbar so Main.java can call updateCollabStatus() on it. */
     public Toolbar getToolbar() {
         return toolBar;
     }
@@ -449,7 +485,6 @@ public class Editor {
         if (save     != null) temp.put("save",     save);
         if (newFile  != null) temp.put("newFile",  newFile);
         if (openFile != null) temp.put("openFile", openFile);
-        // ── Collab callbacks from Main.java ──
         if (showCollabDialog != null) temp.put("showCollabDialog", showCollabDialog);
         if (stopHosting      != null) temp.put("stopHosting",      stopHosting);
         if (disconnectCollab != null) temp.put("disconnectCollab", disconnectCollab);
