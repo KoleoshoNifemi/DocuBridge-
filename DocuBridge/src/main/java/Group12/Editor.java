@@ -206,6 +206,24 @@ public class Editor {
     private void attachJsBridge() {
         bridgeAttached = true;
         System.out.println("✓ JS collab bridge attached");
+
+        // Register listener from executeScript context (same context as quill.getContents works in)
+        Object reg = quill.executeScript(
+            "(function(){" +
+            "  if (typeof quill === 'undefined') return 'quill_not_found';" +
+            "  quill.on('text-change', function(delta, oldDelta, source) {" +
+            "    document.title = 'TC:' + source + ':' + (window._tcFromJava = (window._tcFromJava||0)+1);" +
+            "    if (source !== 'user') return;" +
+            "    var el = document.getElementById('deltaComm');" +
+            "    if (!el) return;" +
+            "    var arr = JSON.parse(el.value || '[]');" +
+            "    arr.push(JSON.stringify(delta));" +
+            "    el.value = JSON.stringify(arr);" +
+            "  });" +
+            "  return 'listener_added';" +
+            "})()"
+        );
+        System.out.println("DEBUG attachJsBridge listener registration: " + reg);
         startDeltaPoller();
     }
 
@@ -219,10 +237,11 @@ public class Editor {
             try {
                 // Every ~4 seconds, print diagnostic regardless of content
                 if (pollCounter++ % 50 == 0) {
-                    Object rawVal = quill.executeScript("var _el=document.getElementById('deltaComm'); _el ? _el.value : 'NOT_FOUND'");
-                    Object title  = quill.executeScript("document.title");
-                    Object tcCount = quill.executeScript("window._tcCount || 0");
-                    System.out.println("DEBUG heartbeat #" + pollCounter + ": deltaComm=[" + rawVal + "], title=" + title + ", textChangeFires=" + tcCount);
+                    Object rawVal  = quill.executeScript("var _el=document.getElementById('deltaComm'); _el ? _el.value : 'NOT_FOUND'");
+                    Object title   = quill.executeScript("document.title");
+                    Object tcJava  = quill.executeScript("window._tcFromJava || 0");
+                    Object content = quill.executeScript("quill.getText().length");
+                    System.out.println("DEBUG heartbeat #" + pollCounter + ": deltaComm=[" + rawVal + "], title=" + title + ", tcFromJava=" + tcJava + ", quillLen=" + content);
                 }
                 String arrJson = (String) quill.executeScript(
                     "(function(){ var el=document.getElementById('deltaComm'); if(!el) return '[]'; var v=el.value||'[]'; el.value='[]'; return v; })()"
