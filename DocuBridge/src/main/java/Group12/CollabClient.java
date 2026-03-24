@@ -21,10 +21,11 @@ import java.util.function.Consumer;
 public class CollabClient extends WebSocketClient {
 
     private final String username;
-    private final String fileName;
+    private String fileName;
     private final WebEngine quillEngine;
 
     private Consumer<String[]> onUsersChanged;
+    private Consumer<String>   onFileNameChanged;
     private volatile boolean applyingRemote = false;
 
     public CollabClient(URI serverUri, String username, String fileName, WebEngine quillEngine) {
@@ -36,6 +37,10 @@ public class CollabClient extends WebSocketClient {
 
     public void setOnUsersChanged(Consumer<String[]> callback) {
         this.onUsersChanged = callback;
+    }
+
+    public void setOnFileNameChanged(Consumer<String> callback) {
+        this.onFileNameChanged = callback;
     }
 
     @Override
@@ -53,6 +58,7 @@ public class CollabClient extends WebSocketClient {
         try {
             JSONObject msg = new JSONObject(message);
             switch (msg.getString("type")) {
+                case "joined"   -> handleJoined(msg.getString("fileName"));
                 case "delta"    -> applyRemoteDelta(msg.getString("delta"), msg.getString("username"));
                 case "full"     -> applyFullContent(msg.getString("content"));
                 case "userlist" -> handleUserList(msg.getJSONArray("users"));
@@ -138,6 +144,16 @@ public class CollabClient extends WebSocketClient {
                 System.err.println("Failed to apply full content: " + e.getMessage());
             }
         });
+    }
+
+    private void handleJoined(String serverFileName) {
+        if (!this.fileName.equals(serverFileName)) {
+            System.out.println("✓ Redirected to file: " + serverFileName);
+            this.fileName = serverFileName;
+            if (onFileNameChanged != null) {
+                Platform.runLater(() -> onFileNameChanged.accept(serverFileName));
+            }
+        }
     }
 
     private void handleUserList(JSONArray users) {

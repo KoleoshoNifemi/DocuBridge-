@@ -71,14 +71,28 @@ public class CollabServer extends WebSocketServer {
     }
 
     private void handleJoin(WebSocket conn, JSONObject msg) {
-        String fileName = msg.getString("fileName");
-        String username = msg.getString("username");
+        String requested = msg.getString("fileName");
+        String username  = msg.getString("username");
+
+        // If the requested room doesn't exist but another room is active, redirect the
+        // joiner there automatically — they don't need to have the same file name.
+        String fileName = requested;
+        if (!documentRooms.containsKey(fileName) && !documentRooms.isEmpty()) {
+            fileName = documentRooms.keySet().iterator().next();
+            System.out.println("  → Redirected " + username + " from '" + requested + "' to '" + fileName + "'");
+        }
 
         usernames.put(conn, username);
         connToFile.put(conn, fileName);
         documentRooms.computeIfAbsent(fileName, k -> Collections.synchronizedSet(new HashSet<>())).add(conn);
 
         System.out.println("✓ " + username + " joined: " + fileName);
+
+        // Always tell the client which room they actually joined
+        JSONObject ack = new JSONObject();
+        ack.put("type",     "joined");
+        ack.put("fileName", fileName);
+        conn.send(ack.toString());
 
         if (latestContent.containsKey(fileName)) {
             JSONObject syncMsg = new JSONObject();

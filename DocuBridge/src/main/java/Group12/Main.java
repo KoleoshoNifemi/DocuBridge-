@@ -266,6 +266,11 @@ public class Main extends Application {
                             currentFileName + "  👥 " + userList)
             );
         });
+        // When the server redirects us to a different file, update our local state
+        editor.getCollabClient().setOnFileNameChanged(serverFileName -> {
+            currentFileName = serverFileName;
+            primaryStage.setTitle("DocuBridge - " + currentUsername + " | " + currentFileName);
+        });
     }
 
     private void showRoomCodeDialog(String roomCode) {
