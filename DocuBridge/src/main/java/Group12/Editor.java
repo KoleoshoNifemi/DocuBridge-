@@ -53,8 +53,8 @@ public class Editor {
         quill = webView.getEngine();
         quill.setOnAlert(event -> {
             String data = event.getData();
-            if (data.startsWith("DELTA:") && collabClient != null) {
-                System.out.println("DEBUG alert delta received");
+            System.out.println("DEBUG setOnAlert fired: " + data);
+            if (data != null && data.startsWith("DELTA:") && collabClient != null) {
                 collabClient.sendDelta(data.substring(6));
             }
         });
@@ -213,6 +213,7 @@ public class Editor {
     private void attachJsBridge() {
         bridgeAttached = true;
         System.out.println("✓ JS collab bridge attached");
+        quill.executeScript("alert('BRIDGE_TEST')");
     }
 
     public void disconnectCollab() {
