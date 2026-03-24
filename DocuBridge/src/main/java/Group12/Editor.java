@@ -17,6 +17,7 @@ import javafx.scene.web.WebEngine;
 import javafx.util.Duration;
 import javafx.stage.FileChooser;
 import netscape.javascript.JSObject;
+import org.json.JSONArray;
 import java.util.HashMap;
 import java.util.concurrent.Callable;
 import java.util.function.BiConsumer;
@@ -41,15 +42,6 @@ public class Editor {
     private String serverHost;
     private String username;
     private boolean bridgeAttached = false;
-    private JavaBridge javaBridge; // strong ref prevents GC
-
-    /** Simple wrapper so JavaFX WebView can proxy the JS→Java call cleanly. */
-    public final class JavaBridge {
-        public void sendDelta(String deltaJson) {
-            System.out.println("DEBUG JavaBridge.sendDelta called");
-            if (collabClient != null) collabClient.sendDelta(deltaJson);
-        }
-    }
     // ─────────────────────────────────────────────────────────────
 
     private double readDPI() {
@@ -212,17 +204,37 @@ public class Editor {
     }
 
     private void attachJsBridge() {
-        // Already on JavaFX thread (called from PauseTransition callback)
         try {
-            javaBridge = new JavaBridge();
-            JSObject win = (JSObject) quill.executeScript("window");
-            win.setMember("javaCollab", javaBridge);
+            quill.executeScript("window._deltaQueue = []");
             bridgeAttached = true;
             System.out.println("✓ JS collab bridge attached");
+            startDeltaPoller();
         } catch (Exception e) {
             System.err.println("Failed to attach JS bridge: " + e.getMessage());
             scheduleAttachBridge();
         }
+    }
+
+    private void startDeltaPoller() {
+        if (!bridgeAttached) return;
+        PauseTransition poll = new PauseTransition(Duration.millis(80));
+        poll.setOnFinished(e -> {
+            if (!bridgeAttached || collabClient == null || !collabClient.isOpen()) return;
+            try {
+                String queueJson = (String) quill.executeScript(
+                    "(function(){ var q = window._deltaQueue; window._deltaQueue = []; return JSON.stringify(q); })()"
+                );
+                if (queueJson != null && !queueJson.equals("[]")) {
+                    System.out.println("DEBUG poller got deltas: " + queueJson);
+                    JSONArray deltas = new JSONArray(queueJson);
+                    for (int i = 0; i < deltas.length(); i++) {
+                        collabClient.sendDelta(deltas.getString(i));
+                    }
+                }
+            } catch (Exception ex) { /* ignore */ }
+            startDeltaPoller();
+        });
+        poll.play();
     }
 
     public void disconnectCollab() {
