@@ -300,7 +300,8 @@ public class Main extends Application {
                 activeRoomCode = CollabServer.generateRoomCode();
                 connectToCollab("localhost");
                 if (editor != null) editor.getToolbar().updateCollabStatus("hosting", activeRoomCode);
-                showRoomCodeDialog(activeRoomCode);
+                final String code = activeRoomCode;
+                Platform.runLater(() -> showRoomCodeDialog(code));
 
             } else if (joinBtn.isSelected()) {
                 String code = codeField.getText().trim();
