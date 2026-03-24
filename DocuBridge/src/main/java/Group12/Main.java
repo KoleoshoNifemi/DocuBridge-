@@ -135,7 +135,7 @@ public class Main extends Application {
                 header, offlineBtn, offlineArea, joinBtn, joinArea,
                 new Separator(), btnRow
         );
-        dialog.setScene(new Scene(root, 460, 335));
+        dialog.setScene(new Scene(root, 560, 420));
 
         openButton.setOnAction(e -> {
             if (fileCombo.getValue() != null) {

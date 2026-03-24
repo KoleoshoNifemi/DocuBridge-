@@ -35,7 +35,7 @@ public class AuthenticationUI {
 
         root.getChildren().addAll(titleLabel, tabPane);
 
-        Scene scene = new Scene(root, 450, 400);
+        Scene scene = new Scene(root, 550, 500);
         stage.setTitle("DocuBridge - Authentication");
         stage.setScene(scene);
         stage.show();
