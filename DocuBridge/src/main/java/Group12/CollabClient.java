@@ -95,19 +95,22 @@ public class CollabClient extends WebSocketClient {
         System.out.println("DEBUG applyRemoteDelta called from " + fromUser);
         Platform.runLater(() -> {
             try {
-                String escaped = escapeForJs(deltaJson);
+                JSObject win = (JSObject) quillEngine.executeScript("window");
+                win.setMember("_pendingDelta", deltaJson);
                 quillEngine.executeScript(
                         "(function(){" +
-                                "  var el=document.getElementById('incomingComm');" +
-                                "  if(!el) return;" +
-                                "  var arr=JSON.parse(el.value||'[]');" +
-                                "  arr.push({op:'delta',data:\"" + escaped + "\"});" +
-                                "  el.value=JSON.stringify(arr);" +
+                                "  if (!window._pendingDelta) return;" +
+                                "  try {" +
+                                "    quill.updateContents(JSON.parse(window._pendingDelta), 'api');" +
+                                "  } catch(e) {" +
+                                "    console.error('applyRemoteDelta failed: ' + e.message);" +
+                                "  }" +
+                                "  window._pendingDelta = null;" +
                                 "})()"
                 );
-                System.out.println("DEBUG applyRemoteDelta: queued to DOM");
+                System.out.println("DEBUG applyRemoteDelta: applied");
             } catch (Exception e) {
-                System.err.println("Failed to queue remote delta: " + e.getMessage());
+                System.err.println("Failed to apply remote delta: " + e.getMessage());
             }
         });
     }
