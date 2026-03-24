@@ -285,12 +285,14 @@
     }, 200);
 
     quill.on('text-change', function (delta, oldDelta, source) {
+        window._tcCount = (window._tcCount || 0) + 1;
+        window._lastSource = source;
         if (source === 'user') {
             var el = document.getElementById('deltaComm');
             var arr = JSON.parse(el.value || '[]');
             arr.push(JSON.stringify(delta));
             el.value = JSON.stringify(arr);
-            document.title = 'PENDING:' + arr.length; // debug: visible to executeScript
+            document.title = 'PENDING:' + arr.length;
         }
     });
 

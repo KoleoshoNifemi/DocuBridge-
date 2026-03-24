@@ -219,9 +219,10 @@ public class Editor {
             try {
                 // Every ~4 seconds, print diagnostic regardless of content
                 if (pollCounter++ % 50 == 0) {
-                    Object elFound = quill.executeScript("document.getElementById('deltaComm') !== null");
-                    Object rawVal  = quill.executeScript("var _el=document.getElementById('deltaComm'); _el ? _el.value : 'ELEMENT_NOT_FOUND'");
-                    System.out.println("DEBUG heartbeat #" + pollCounter + ": el=" + elFound + ", val=[" + rawVal + "]");
+                    Object rawVal = quill.executeScript("var _el=document.getElementById('deltaComm'); _el ? _el.value : 'NOT_FOUND'");
+                    Object title  = quill.executeScript("document.title");
+                    Object tcCount = quill.executeScript("window._tcCount || 0");
+                    System.out.println("DEBUG heartbeat #" + pollCounter + ": deltaComm=[" + rawVal + "], title=" + title + ", textChangeFires=" + tcCount);
                 }
                 String arrJson = (String) quill.executeScript(
                     "(function(){ var el=document.getElementById('deltaComm'); if(!el) return '[]'; var v=el.value||'[]'; el.value='[]'; return v; })()"
