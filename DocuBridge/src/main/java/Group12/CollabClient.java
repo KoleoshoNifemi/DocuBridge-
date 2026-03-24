@@ -2,6 +2,7 @@ package Group12;
 
 import javafx.application.Platform;
 import javafx.scene.web.WebEngine;
+import netscape.javascript.JSObject;
 import org.java_websocket.client.WebSocketClient;
 import org.java_websocket.handshake.ServerHandshake;
 import org.json.JSONArray;
@@ -114,19 +115,24 @@ public class CollabClient extends WebSocketClient {
     private void applyFullContent(String contentJson) {
         Platform.runLater(() -> {
             try {
-                String escaped = escapeForJs(contentJson);
+                // Use JSObject.setMember to pass content directly — avoids JS string
+                // escaping issues that silently break JSON.parse on certain characters.
+                JSObject win = (JSObject) quillEngine.executeScript("window");
+                win.setMember("_pendingFullContent", contentJson);
                 quillEngine.executeScript(
                         "(function(){" +
-                                "  var el=document.getElementById('incomingComm');" +
-                                "  if(!el) return;" +
-                                "  var arr=JSON.parse(el.value||'[]');" +
-                                "  arr.push({op:'full',data:\"" + escaped + "\"});" +
-                                "  el.value=JSON.stringify(arr);" +
+                                "  if (!window._pendingFullContent) return;" +
+                                "  try {" +
+                                "    quill.setContents(JSON.parse(window._pendingFullContent), 'api');" +
+                                "  } catch(e) {" +
+                                "    console.error('applyFullContent failed: ' + e.message);" +
+                                "  }" +
+                                "  window._pendingFullContent = null;" +
                                 "})()"
                 );
                 System.out.println("✓ Synced full document from server");
             } catch (Exception e) {
-                System.err.println("Failed to queue full content: " + e.getMessage());
+                System.err.println("Failed to apply full content: " + e.getMessage());
             }
         });
     }
