@@ -55,27 +55,87 @@ public class Main extends Application {
 
     private void showFileSelector() {
         java.util.List<String> userFiles = db.getUserFiles(currentUserId);
+        java.util.Collections.reverse(userFiles);
 
-        Dialog<ButtonType> dialog = new Dialog<>();
-        dialog.setTitle("Open File");
-        dialog.setHeaderText("Select a file or create a new one");
+        Stage dialog = new Stage();
+        dialog.initOwner(primaryStage);
+        dialog.initModality(javafx.stage.Modality.APPLICATION_MODAL);
+        dialog.setTitle("DocuBridge");
+        dialog.setResizable(false);
 
-        VBox content = new VBox(15);
-        content.setPadding(new Insets(15));
+        VBox root = new VBox(10);
+        root.setPadding(new Insets(20));
+        root.setStyle("-fx-background-color: white;");
+
+        Label header = new Label("What would you like to do?");
+        header.setStyle("-fx-font-size: 13px; -fx-font-weight: bold;");
+
+        RadioButton offlineBtn = new RadioButton("Work Offline");
+        RadioButton joinBtn    = new RadioButton("Join a Session");
+        ToggleGroup group = new ToggleGroup();
+        offlineBtn.setToggleGroup(group);
+        joinBtn.setToggleGroup(group);
+        offlineBtn.setSelected(true);
+
+        // ── Work Offline area ──────────────────────────────────────────
+        VBox offlineArea = new VBox(8);
+        offlineArea.setPadding(new Insets(2, 0, 4, 20));
 
         ComboBox<String> fileCombo = new ComboBox<>();
-        fileCombo.setPromptText("Select File");
-        java.util.Collections.reverse(userFiles);
+        fileCombo.setPromptText("Select existing file");
         fileCombo.getItems().addAll(userFiles);
+        fileCombo.setMaxWidth(280);
 
         Button openButton   = new Button("Open");   openButton.setDisable(true);
         Button deleteButton = new Button("Delete"); deleteButton.setDisable(true);
-
-        fileCombo.valueProperty().addListener((obs, oldVal, newVal) -> {
-            boolean isSelected = newVal != null && !newVal.isEmpty();
-            openButton.setDisable(!isSelected);
-            deleteButton.setDisable(!isSelected);
+        fileCombo.valueProperty().addListener((obs, o, n) -> {
+            boolean sel = n != null && !n.isEmpty();
+            openButton.setDisable(!sel);
+            deleteButton.setDisable(!sel);
         });
+
+        HBox fileRow = new HBox(8, fileCombo, openButton, deleteButton);
+
+        TextField newFileField = new TextField();
+        newFileField.setPromptText("New file name...");
+        newFileField.setMaxWidth(280);
+
+        offlineArea.getChildren().addAll(
+                new Label("Your Files:"), fileRow,
+                new Separator(),
+                new Label("Create New File:"), newFileField
+        );
+
+        // ── Join area ──────────────────────────────────────────────────
+        VBox joinArea = new VBox(6);
+        joinArea.setPadding(new Insets(2, 0, 4, 20));
+        joinArea.setDisable(true);
+
+        TextField codeField = new TextField();
+        codeField.setPromptText("Same WiFi: BRIDGE-4821   |   Different WiFi: host:port");
+        codeField.setMaxWidth(380);
+        joinArea.getChildren().addAll(new Label("Room code or address:"), codeField);
+
+        group.selectedToggleProperty().addListener((obs, old, now) -> {
+            boolean isJoin = now == joinBtn;
+            offlineArea.setDisable(isJoin);
+            joinArea.setDisable(!isJoin);
+        });
+
+        // ── Buttons ────────────────────────────────────────────────────
+        Button continueBtn = new Button("Continue");
+        Button cancelBtn   = new Button("Cancel");
+        continueBtn.setDefaultButton(true);
+        cancelBtn.setCancelButton(true);
+        continueBtn.setStyle("-fx-pref-width: 90px;");
+        cancelBtn.setStyle("-fx-pref-width: 90px;");
+        HBox btnRow = new HBox(10, continueBtn, cancelBtn);
+
+        root.getChildren().addAll(
+                header, offlineBtn, offlineArea, joinBtn, joinArea,
+                new Separator(), btnRow
+        );
+        dialog.setScene(new Scene(root, 460, 335));
 
         openButton.setOnAction(e -> {
             if (fileCombo.getValue() != null) {
@@ -88,60 +148,60 @@ public class Main extends Application {
         deleteButton.setOnAction(e -> {
             if (fileCombo.getValue() != null) {
                 String fileToDelete = fileCombo.getValue();
-                Alert confirmDialog = new Alert(Alert.AlertType.CONFIRMATION);
-                confirmDialog.setTitle("Confirm Delete");
-                confirmDialog.setHeaderText("Delete '" + fileToDelete + "'?");
-                confirmDialog.setContentText("This action cannot be undone.");
-                java.util.Optional<ButtonType> confirmResult = confirmDialog.showAndWait();
-                if (confirmResult.isPresent() && confirmResult.get() == ButtonType.OK) {
-                    db.deleteFile(currentUserId, fileToDelete);
-                    String documentsFolder = System.getProperty("user.home") + java.io.File.separator + "Documents";
-                    String fileName = fileToDelete.endsWith(".docx") ? fileToDelete : fileToDelete + ".docx";
-                    String filePath = documentsFolder + java.io.File.separator + "DocuBridge" + java.io.File.separator + fileName;
-                    java.io.File file = new java.io.File(filePath);
-                    if (file.exists() && file.delete()) System.out.println("✓ Deleted file: " + filePath);
-                    else if (!file.exists())             System.out.println("⚠ File doesn't exist at: " + filePath);
-                    else                                 System.err.println("✗ Failed to delete: " + filePath);
-                    fileCombo.getItems().remove(fileToDelete);
-                    fileCombo.setValue(null);
-                    openButton.setDisable(true);
-                    deleteButton.setDisable(true);
+                Alert confirm = new Alert(Alert.AlertType.CONFIRMATION);
+                confirm.setTitle("Confirm Delete");
+                confirm.setHeaderText("Delete '" + fileToDelete + "'?");
+                confirm.setContentText("This action cannot be undone.");
+                confirm.showAndWait().ifPresent(result -> {
+                    if (result == ButtonType.OK) {
+                        db.deleteFile(currentUserId, fileToDelete);
+                        String docs = System.getProperty("user.home") + java.io.File.separator + "Documents";
+                        String fn   = fileToDelete.endsWith(".docx") ? fileToDelete : fileToDelete + ".docx";
+                        java.io.File file = new java.io.File(docs + java.io.File.separator + "DocuBridge" + java.io.File.separator + fn);
+                        if (file.exists() && file.delete()) System.out.println("✓ Deleted file: " + file.getPath());
+                        else if (!file.exists())             System.out.println("⚠ File not found: " + file.getPath());
+                        else                                 System.err.println("✗ Failed to delete: " + file.getPath());
+                        fileCombo.getItems().remove(fileToDelete);
+                        fileCombo.setValue(null);
+                    }
+                });
+            }
+        });
+
+        continueBtn.setOnAction(e -> {
+            if (offlineBtn.isSelected()) {
+                String newName = newFileField.getText().trim();
+                if (!newName.isEmpty()) {
+                    db.createFile(currentUserId, newName);
+                    currentFileName = newName;
+                    dialog.close();
+                    showEditor();
+                }
+            } else {
+                String code = codeField.getText().trim();
+                if (!code.isEmpty()) {
+                    String host = CollabServer.resolveHostFromCode(code.toUpperCase());
+                    if (host == null) host = code;
+                    currentFileName = null; // will be assigned by the server's "joined" ack
+                    dialog.close();
+                    showEditor(host);
                 }
             }
         });
 
-        HBox buttonBox = new HBox(10);
-        buttonBox.getChildren().addAll(openButton, deleteButton);
-
-        TextField newFileField = new TextField();
-        newFileField.setPromptText("Enter file name...");
-
-        content.getChildren().addAll(
-                new Label("Your Files:"), fileCombo, buttonBox,
-                new Separator(),
-                new Label("Create New File:"), newFileField
-        );
-
-        dialog.getDialogPane().setContent(content);
-        dialog.getDialogPane().getButtonTypes().addAll(ButtonType.OK, ButtonType.CANCEL);
-
-        java.util.Optional<ButtonType> result = dialog.showAndWait();
-        if (result.isPresent() && result.get() == ButtonType.OK) {
-            String newName = newFileField.getText().trim();
-            if (!newName.isEmpty()) {
-                db.createFile(currentUserId, newName);
-                currentFileName = newName;
-                showEditor();
-            }
-        }
+        cancelBtn.setOnAction(e -> dialog.close());
+        dialog.showAndWait();
     }
 
-    private void showEditor() {
+    private void showEditor() { showEditor(null); }
+
+    private void showEditor(String joinAddress) {
         try {
-            String content = db.getFileContent(currentUserId, currentFileName);
+            String displayName = currentFileName != null ? currentFileName : "Connecting...";
+            String content     = currentFileName != null ? db.getFileContent(currentUserId, currentFileName) : null;
 
             editor = new Editor(
-                    currentFileName,
+                    displayName,
                     this::saveAs,
                     this::saveFile,
                     this::newFile,
@@ -154,11 +214,17 @@ public class Main extends Application {
             if (content != null && !content.isEmpty()) editor.loadContent(content);
 
             Scene scene = new Scene(editor.getView(), 1200, 800);
-            primaryStage.setTitle("DocuBridge - " + currentUsername + " | " + currentFileName);
+            primaryStage.setTitle("DocuBridge - " + currentUsername + " | " + displayName);
             primaryStage.setScene(scene);
             primaryStage.setMaximized(true);
 
-            Platform.runLater(() -> showCollabSetupDialog());
+            if (joinAddress != null) {
+                final String addr = joinAddress;
+                Platform.runLater(() -> {
+                    connectToCollab(addr);
+                    editor.getToolbar().updateCollabStatus("connected", addr);
+                });
+            }
 
             startAutoSave();
 
@@ -166,7 +232,7 @@ public class Main extends Application {
                 saveFile();
                 disconnectFromCollab();
                 CollabServer.stopServer();
-                System.out.println("✓ File '" + currentFileName + "' saved!");
+                System.out.println("✓ File '" + (currentFileName != null ? currentFileName : "unsaved") + "' saved!");
                 System.exit(0);
             });
         } catch (Exception e) {
@@ -263,11 +329,14 @@ public class Main extends Application {
             String userList = String.join(", ", users);
             Platform.runLater(() ->
                     primaryStage.setTitle("DocuBridge - " + currentUsername + " | " +
-                            currentFileName + "  👥 " + userList)
+                            (currentFileName != null ? currentFileName : "Connecting...") + "  👥 " + userList)
             );
         });
-        // When the server redirects us to a different file, update our local state
         editor.getCollabClient().setOnFileNameChanged(serverFileName -> {
+            // Create a local DB entry for this file if the user doesn't have one yet
+            if (!db.getUserFiles(currentUserId).contains(serverFileName)) {
+                db.createFile(currentUserId, serverFileName);
+            }
             currentFileName = serverFileName;
             primaryStage.setTitle("DocuBridge - " + currentUsername + " | " + currentFileName);
         });
