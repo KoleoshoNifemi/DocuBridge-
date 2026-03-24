@@ -86,7 +86,8 @@ public class Main extends Application {
         fileCombo.getItems().addAll(userFiles);
         fileCombo.setMaxWidth(280);
 
-        Button openButton   = new Button("Open");   openButton.setDisable(true);
+        String blueBtn = "-fx-background-color: #0096C9; -fx-text-fill: white; -fx-font-weight: bold;";
+        Button openButton   = new Button("Open");   openButton.setDisable(true); openButton.setStyle(blueBtn);
         Button deleteButton = new Button("Delete"); deleteButton.setDisable(true);
         fileCombo.valueProperty().addListener((obs, o, n) -> {
             boolean sel = n != null && !n.isEmpty();
@@ -127,7 +128,7 @@ public class Main extends Application {
         Button cancelBtn   = new Button("Cancel");
         continueBtn.setDefaultButton(true);
         cancelBtn.setCancelButton(true);
-        continueBtn.setStyle("-fx-pref-width: 90px;");
+        continueBtn.setStyle("-fx-pref-width: 90px; -fx-background-color: #0096C9; -fx-text-fill: white; -fx-font-weight: bold;");
         cancelBtn.setStyle("-fx-pref-width: 90px;");
         HBox btnRow = new HBox(10, continueBtn, cancelBtn);
 
