@@ -128,9 +128,24 @@ public class Main extends Application {
         Button cancelBtn   = new Button("Cancel");
         continueBtn.setDefaultButton(true);
         cancelBtn.setCancelButton(true);
-        continueBtn.setStyle("-fx-pref-width: 90px; -fx-background-color: #0096C9; -fx-text-fill: white; -fx-font-weight: bold;");
         cancelBtn.setStyle("-fx-pref-width: 90px;");
         HBox btnRow = new HBox(10, continueBtn, cancelBtn);
+
+        String activeStyle   = "-fx-pref-width: 90px; -fx-background-color: #0096C9; -fx-text-fill: white; -fx-font-weight: bold;";
+        String inactiveStyle = "-fx-pref-width: 90px; -fx-background-color: #a8d4e8; -fx-text-fill: white; -fx-font-weight: bold;";
+
+        Runnable updateContinue = () -> {
+            boolean enabled = offlineBtn.isSelected()
+                    ? !newFileField.getText().trim().isEmpty()
+                    : !codeField.getText().trim().isEmpty();
+            continueBtn.setStyle(enabled ? activeStyle : inactiveStyle);
+            continueBtn.setDisable(!enabled);
+        };
+
+        updateContinue.run(); // start disabled
+        newFileField.textProperty().addListener((obs, o, n) -> updateContinue.run());
+        codeField.textProperty().addListener((obs, o, n) -> updateContinue.run());
+        group.selectedToggleProperty().addListener((obs, o, n) -> updateContinue.run());
 
         root.getChildren().addAll(
                 header, offlineBtn, offlineArea, joinBtn, joinArea,
