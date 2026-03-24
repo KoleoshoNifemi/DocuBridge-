@@ -282,10 +282,9 @@
         quill.focus();
     }, 200);
 
-    window._deltaQueue = [];
     quill.on('text-change', function (delta, oldDelta, source) {
         if (source === 'user') {
-            window._deltaQueue.push(JSON.stringify(delta));
+            alert('DELTA:' + JSON.stringify(delta));
         }
     });
 </script>

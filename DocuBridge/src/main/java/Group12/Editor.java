@@ -51,6 +51,13 @@ public class Editor {
     private void initializeWebView() {
         webView = new WebView();
         quill = webView.getEngine();
+        quill.setOnAlert(event -> {
+            String data = event.getData();
+            if (data.startsWith("DELTA:") && collabClient != null) {
+                System.out.println("DEBUG alert delta received");
+                collabClient.sendDelta(data.substring(6));
+            }
+        });
         String quillJsPath = getClass().getResource("/quill/editor.html").toExternalForm();
         quill.getLoadWorker().stateProperty().addListener((obs, old, newState) -> {
             if (newState == javafx.concurrent.Worker.State.SUCCEEDED) {
@@ -204,37 +211,8 @@ public class Editor {
     }
 
     private void attachJsBridge() {
-        try {
-            quill.executeScript("window._deltaQueue = []");
-            bridgeAttached = true;
-            System.out.println("✓ JS collab bridge attached");
-            startDeltaPoller();
-        } catch (Exception e) {
-            System.err.println("Failed to attach JS bridge: " + e.getMessage());
-            scheduleAttachBridge();
-        }
-    }
-
-    private void startDeltaPoller() {
-        if (!bridgeAttached) return;
-        PauseTransition poll = new PauseTransition(Duration.millis(80));
-        poll.setOnFinished(e -> {
-            if (!bridgeAttached || collabClient == null || !collabClient.isOpen()) return;
-            try {
-                String queueJson = (String) quill.executeScript(
-                    "(function(){ var q = window._deltaQueue; window._deltaQueue = []; return JSON.stringify(q); })()"
-                );
-                if (queueJson != null && !queueJson.equals("[]")) {
-                    System.out.println("DEBUG poller got deltas: " + queueJson);
-                    JSONArray deltas = new JSONArray(queueJson);
-                    for (int i = 0; i < deltas.length(); i++) {
-                        collabClient.sendDelta(deltas.getString(i));
-                    }
-                }
-            } catch (Exception ex) { /* ignore */ }
-            startDeltaPoller();
-        });
-        poll.play();
+        bridgeAttached = true;
+        System.out.println("✓ JS collab bridge attached");
     }
 
     public void disconnectCollab() {
