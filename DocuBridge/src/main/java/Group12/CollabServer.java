@@ -187,8 +187,11 @@ public class CollabServer extends WebSocketServer {
     private static final Map<String, String> roomCodes = Collections.synchronizedMap(new HashMap<>());
 
     public static String generateRoomCode() {
-        try {
-            String ip = java.net.InetAddress.getLocalHost().getHostAddress();
+        // DatagramSocket trick: ask the OS which local IP it would use to reach an
+        // external address. No data is actually sent — it just picks the right interface.
+        try (java.net.DatagramSocket socket = new java.net.DatagramSocket()) {
+            socket.connect(java.net.InetAddress.getByName("8.8.8.8"), 80);
+            String ip = socket.getLocalAddress().getHostAddress();
             System.out.println("✓ Host IP: " + ip);
             return ip;
         } catch (Exception e) {
