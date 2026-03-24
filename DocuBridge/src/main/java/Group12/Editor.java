@@ -218,6 +218,7 @@ public class Editor {
                     "(function(){ var el=document.getElementById('deltaComm'); if(!el) return '[]'; var v=el.value||'[]'; el.value='[]'; return v; })()"
                 );
                 if (arrJson != null && !arrJson.equals("[]")) {
+                    System.out.println("DEBUG poller: found deltas: " + arrJson);
                     JSONArray arr = new JSONArray(arrJson);
                     for (int i = 0; i < arr.length(); i++) {
                         collabClient.sendDelta(arr.getString(i));

@@ -95,13 +95,18 @@ public class CollabServer extends WebSocketServer {
 
     private void handleDelta(WebSocket conn, JSONObject msg) {
         String fileName = msg.getString("fileName");
-        msg.put("username", usernames.getOrDefault(conn, "unknown"));
+        String user = usernames.getOrDefault(conn, "unknown");
+        msg.put("username", user);
+        System.out.println("DEBUG server: delta from " + user);
 
         Set<WebSocket> room = documentRooms.get(fileName);
         if (room != null) {
             synchronized (room) {
                 for (WebSocket client : room) {
-                    if (client != conn && client.isOpen()) client.send(msg.toString());
+                    if (client != conn && client.isOpen()) {
+                        client.send(msg.toString());
+                        System.out.println("DEBUG server: forwarded to " + usernames.getOrDefault(client, "?"));
+                    }
                 }
             }
         }

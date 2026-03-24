@@ -72,6 +72,7 @@ public class CollabClient extends WebSocketClient {
     }
 
     public void sendDelta(String deltaJson) {
+        System.out.println("DEBUG sendDelta: isOpen=" + isOpen());
         if (applyingRemote || !isOpen()) return;
         JSONObject msg = new JSONObject();
         msg.put("type",     "delta");
@@ -90,6 +91,7 @@ public class CollabClient extends WebSocketClient {
     }
 
     private void applyRemoteDelta(String deltaJson, String fromUser) {
+        System.out.println("DEBUG applyRemoteDelta called from " + fromUser);
         Platform.runLater(() -> {
             try {
                 String escaped = escapeForJs(deltaJson);
@@ -102,6 +104,7 @@ public class CollabClient extends WebSocketClient {
                                 "  el.value=JSON.stringify(arr);" +
                                 "})()"
                 );
+                System.out.println("DEBUG applyRemoteDelta: queued to DOM");
             } catch (Exception e) {
                 System.err.println("Failed to queue remote delta: " + e.getMessage());
             }
