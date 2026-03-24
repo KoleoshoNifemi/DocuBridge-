@@ -203,23 +203,22 @@ public class Editor {
     }
 
     private void attachJsBridge() {
-        Platform.runLater(() -> {
-            try {
-                Boolean ready = (Boolean) quill.executeScript("typeof window.collabBridge !== 'undefined'");
-                if (Boolean.TRUE.equals(ready)) {
-                    JSObject bridge = (JSObject) quill.executeScript("window.collabBridge");
-                    bridge.setMember("javaClient", collabClient);
-                    bridgeAttached = true;
-                    System.out.println("✓ JS collab bridge attached");
-                } else {
-                    // collabBridge not in page yet — keep polling
-                    scheduleAttachBridge();
-                }
-            } catch (Exception e) {
-                System.err.println("Failed to attach JS bridge: " + e.getMessage());
+        // Already on JavaFX thread (called from PauseTransition callback)
+        try {
+            String type = String.valueOf(quill.executeScript("typeof window.collabBridge"));
+            if ("object".equals(type) || "function".equals(type)) {
+                JSObject bridge = (JSObject) quill.executeScript("window.collabBridge");
+                bridge.setMember("javaClient", collabClient);
+                bridgeAttached = true;
+                System.out.println("✓ JS collab bridge attached");
+            } else {
+                System.out.println("DEBUG collabBridge typeof=" + type + ", retrying...");
                 scheduleAttachBridge();
             }
-        });
+        } catch (Exception e) {
+            System.err.println("Failed to attach JS bridge: " + e.getMessage());
+            scheduleAttachBridge();
+        }
     }
 
     public void disconnectCollab() {
