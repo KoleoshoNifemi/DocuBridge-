@@ -41,6 +41,15 @@ public class Editor {
     private String serverHost;
     private String username;
     private boolean bridgeAttached = false;
+    private JavaBridge javaBridge; // strong ref prevents GC
+
+    /** Simple wrapper so JavaFX WebView can proxy the JS→Java call cleanly. */
+    public final class JavaBridge {
+        public void sendDelta(String deltaJson) {
+            System.out.println("DEBUG JavaBridge.sendDelta called");
+            if (collabClient != null) collabClient.sendDelta(deltaJson);
+        }
+    }
     // ─────────────────────────────────────────────────────────────
 
     private double readDPI() {
@@ -205,8 +214,9 @@ public class Editor {
     private void attachJsBridge() {
         // Already on JavaFX thread (called from PauseTransition callback)
         try {
+            javaBridge = new JavaBridge();
             JSObject win = (JSObject) quill.executeScript("window");
-            win.setMember("javaCollab", collabClient);
+            win.setMember("javaCollab", javaBridge);
             bridgeAttached = true;
             System.out.println("✓ JS collab bridge attached");
         } catch (Exception e) {

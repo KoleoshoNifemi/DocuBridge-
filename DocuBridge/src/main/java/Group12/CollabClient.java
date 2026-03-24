@@ -72,6 +72,7 @@ public class CollabClient extends WebSocketClient {
     }
 
     public void sendDelta(String deltaJson) {
+        System.out.println("DEBUG sendDelta called, applyingRemote=" + applyingRemote + " isOpen=" + isOpen());
         if (applyingRemote || !isOpen()) return;
         JSONObject msg = new JSONObject();
         msg.put("type",     "delta");
