@@ -112,7 +112,7 @@ public class Main extends Application {
         joinArea.setDisable(true);
 
         TextField codeField = new TextField();
-        codeField.setPromptText("Same WiFi: BRIDGE-4821   |   Different WiFi: host:port");
+        codeField.setPromptText("Same network: 192.168.x.x   |   Different network: host:port");
         codeField.setMaxWidth(380);
         joinArea.getChildren().addAll(new Label("Room code or address:"), codeField);
 
@@ -269,7 +269,7 @@ public class Main extends Application {
 
         // ── updated placeholder to reflect localhost.run format ──
         TextField codeField = new TextField();
-        codeField.setPromptText("Same WiFi: BRIDGE-4821   |   Different WiFi: abc123.lhr.life");
+        codeField.setPromptText("Same network: 192.168.x.x   |   Different network: host:port");
         codeField.setDisable(true);
         codeField.setMaxWidth(380);
 
@@ -349,10 +349,10 @@ public class Main extends Application {
         alert.setTitle("Session Started");
         alert.setHeaderText("Share with your teammates:");
 
-        Label sameWifiHeader = new Label("👥  Same WiFi — Room code:");
+        Label sameWifiHeader = new Label("👥  Same network (hotspot/LAN) — your IP:");
         sameWifiHeader.setStyle("-fx-font-weight: bold;");
         Label codeLabel = new Label(roomCode);
-        codeLabel.setStyle("-fx-font-size: 26px; -fx-font-weight: bold; -fx-font-family: monospace; -fx-padding: 2 0 8 0;");
+        codeLabel.setStyle("-fx-font-size: 22px; -fx-font-weight: bold; -fx-font-family: monospace; -fx-padding: 2 0 8 0;");
 
         Label diffWifiHeader = new Label("🌐  Different WiFi — ngrok:");
         diffWifiHeader.setStyle("-fx-font-weight: bold; -fx-padding: 6 0 0 0;");

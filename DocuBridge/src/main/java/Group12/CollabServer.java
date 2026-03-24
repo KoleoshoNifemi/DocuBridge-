@@ -188,20 +188,12 @@ public class CollabServer extends WebSocketServer {
 
     public static String generateRoomCode() {
         try {
-            String ip      = java.net.InetAddress.getLocalHost().getHostAddress();
-            String[] parts = ip.split("\\.");
-            int lastOctet  = Integer.parseInt(parts[parts.length - 1]);
-            int secondLast = parts.length >= 2 ? Integer.parseInt(parts[parts.length - 2]) : 0;
-            int code       = ((secondLast % 100) * 100 + lastOctet) % 9000 + 1000;
-            String roomCode = "BRIDGE-" + code;
-            roomCodes.put(roomCode, ip);
-            System.out.println("✓ Room code: " + roomCode + " → " + ip);
-            return roomCode;
+            String ip = java.net.InetAddress.getLocalHost().getHostAddress();
+            System.out.println("✓ Host IP: " + ip);
+            return ip;
         } catch (Exception e) {
-            int code = 1000 + (int)(Math.random() * 9000);
-            String roomCode = "BRIDGE-" + code;
-            roomCodes.put(roomCode, "localhost");
-            return roomCode;
+            System.err.println("Could not determine local IP, falling back to localhost");
+            return "localhost";
         }
     }
 
