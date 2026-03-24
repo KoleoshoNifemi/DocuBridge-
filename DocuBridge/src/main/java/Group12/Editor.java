@@ -205,16 +205,10 @@ public class Editor {
     private void attachJsBridge() {
         // Already on JavaFX thread (called from PauseTransition callback)
         try {
-            String type = String.valueOf(quill.executeScript("typeof window.collabBridge"));
-            if ("object".equals(type) || "function".equals(type)) {
-                JSObject bridge = (JSObject) quill.executeScript("window.collabBridge");
-                bridge.setMember("javaClient", collabClient);
-                bridgeAttached = true;
-                System.out.println("✓ JS collab bridge attached");
-            } else {
-                System.out.println("DEBUG collabBridge typeof=" + type + ", retrying...");
-                scheduleAttachBridge();
-            }
+            JSObject win = (JSObject) quill.executeScript("window");
+            win.setMember("javaCollab", collabClient);
+            bridgeAttached = true;
+            System.out.println("✓ JS collab bridge attached");
         } catch (Exception e) {
             System.err.println("Failed to attach JS bridge: " + e.getMessage());
             scheduleAttachBridge();
