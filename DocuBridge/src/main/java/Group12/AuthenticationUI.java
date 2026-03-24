@@ -1,5 +1,6 @@
 package Group12;
 
+import javafx.application.Platform;
 import javafx.geometry.Insets;
 import javafx.scene.Scene;
 import javafx.scene.control.*;
@@ -74,17 +75,26 @@ public class AuthenticationUI {
                 return;
             }
 
-            String hash = db.getPasswordHash(username);
-            if (hash != null && BCrypt.checkpw(password, hash)) {
-                currentUserId = db.getUserId(username);
-                currentUsername = username;
-                statusLabel.setText("Login successful!");
-                statusLabel.setStyle("-fx-text-fill: green;");
-                onAuthSuccess.run();
-            } else {
-                statusLabel.setText("Invalid username or password");
-                statusLabel.setStyle("-fx-text-fill: red;");
-            }
+            loginBtn.setDisable(true);
+            statusLabel.setText("Connecting to server, please wait...");
+            statusLabel.setStyle("-fx-text-fill: #e67e22;");
+
+            new Thread(() -> {
+                String hash = db.getPasswordHash(username);
+                Platform.runLater(() -> {
+                    loginBtn.setDisable(false);
+                    if (hash != null && BCrypt.checkpw(password, hash)) {
+                        currentUserId   = db.getUserId(username);
+                        currentUsername = username;
+                        statusLabel.setText("Login successful!");
+                        statusLabel.setStyle("-fx-text-fill: green;");
+                        onAuthSuccess.run();
+                    } else {
+                        statusLabel.setText("Invalid username or password");
+                        statusLabel.setStyle("-fx-text-fill: red;");
+                    }
+                });
+            }, "db-login").start();
         });
 
         content.getChildren().addAll(
@@ -157,17 +167,27 @@ public class AuthenticationUI {
                 return;
             }
 
-            String hash = BCrypt.hashpw(password, BCrypt.gensalt());
-            if (db.registerUser(username, hash)) {
-                statusLabel.setText("Account created! Switch to Login tab.");
-                statusLabel.setStyle("-fx-text-fill: green;");
-                usernameField.clear();
-                passwordField.clear();
-                confirmField.clear();
-            } else {
-                statusLabel.setText("Username already taken");
-                statusLabel.setStyle("-fx-text-fill: red;");
-            }
+            signupBtn.setDisable(true);
+            statusLabel.setText("Connecting to server, please wait...");
+            statusLabel.setStyle("-fx-text-fill: #e67e22;");
+
+            new Thread(() -> {
+                String hash = BCrypt.hashpw(password, BCrypt.gensalt());
+                boolean success = db.registerUser(username, hash);
+                Platform.runLater(() -> {
+                    signupBtn.setDisable(false);
+                    if (success) {
+                        statusLabel.setText("Account created! Switch to Login tab.");
+                        statusLabel.setStyle("-fx-text-fill: green;");
+                        usernameField.clear();
+                        passwordField.clear();
+                        confirmField.clear();
+                    } else {
+                        statusLabel.setText("Username already taken");
+                        statusLabel.setStyle("-fx-text-fill: red;");
+                    }
+                });
+            }, "db-signup").start();
         });
 
         content.getChildren().addAll(

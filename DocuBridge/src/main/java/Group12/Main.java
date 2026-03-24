@@ -366,12 +366,88 @@ public class Main extends Application {
         Label keepOpen = new Label("⚠ Keep the terminal open while your session is active.");
         keepOpen.setStyle("-fx-text-fill: #c0392b; -fx-font-weight: bold; -fx-font-size: 11px;");
 
+        Button firstTimeBtn = new Button("First time hosting? Click here to set up ngrok");
+        firstTimeBtn.setStyle("-fx-text-fill: #2980b9; -fx-background-color: transparent; -fx-cursor: hand; -fx-underline: true; -fx-padding: 6 0 0 0;");
+        firstTimeBtn.setOnAction(e -> showNgrokSetupGuide());
+
         VBox content = new VBox(5);
         content.getChildren().addAll(sameWifiHeader, codeLabel, new Separator(),
-                diffWifiHeader, step1, ngrokCmd, step2, step3, keepOpen);
+                diffWifiHeader, step1, ngrokCmd, step2, step3, keepOpen,
+                new Separator(), firstTimeBtn);
         alert.getDialogPane().setContent(content);
         alert.getDialogPane().setPrefWidth(500);
         alert.showAndWait();
+    }
+
+    private void showNgrokSetupGuide() {
+        Stage guide = new Stage();
+        guide.initOwner(primaryStage);
+        guide.initModality(javafx.stage.Modality.APPLICATION_MODAL);
+        guide.setTitle("ngrok Setup Guide");
+        guide.setResizable(false);
+
+        VBox root = new VBox(12);
+        root.setPadding(new Insets(24));
+        root.setStyle("-fx-background-color: white;");
+        root.setPrefWidth(520);
+
+        Label header = new Label("Setting up ngrok for the first time");
+        header.setStyle("-fx-font-size: 15px; -fx-font-weight: bold;");
+
+        Label intro = new Label("ngrok lets teammates on different networks join your session by creating a secure tunnel to your machine.");
+        intro.setWrapText(true);
+        intro.setStyle("-fx-text-fill: #555;");
+
+        // Step 1
+        Label s1 = new Label("Step 1 — Create a free account");
+        s1.setStyle("-fx-font-weight: bold;");
+        Label s1detail = new Label("Go to https://ngrok.com and sign up for a free account.");
+        s1detail.setWrapText(true);
+
+        // Step 2
+        Label s2 = new Label("Step 2 — Download and install ngrok");
+        s2.setStyle("-fx-font-weight: bold;");
+        Label s2detail = new Label("After signing in, go to the Setup & Installation page. Download the version for your OS and follow the install instructions.");
+        s2detail.setWrapText(true);
+
+        // Step 3
+        Label s3 = new Label("Step 3 — Connect your account");
+        s3.setStyle("-fx-font-weight: bold;");
+        Label s3detail = new Label("On the ngrok dashboard, copy your authtoken. Then run this once in a terminal:");
+        s3detail.setWrapText(true);
+        Label authtokenCmd = new Label("    ngrok config add-authtoken <your-token-here>");
+        authtokenCmd.setStyle("-fx-font-family: monospace; -fx-background-color: #f0f0f0; -fx-padding: 6; -fx-font-size: 12px;");
+
+        // Step 4
+        Label s4 = new Label("Step 4 — Every time you host");
+        s4.setStyle("-fx-font-weight: bold;");
+        Label s4detail = new Label("Open a terminal and run:");
+        Label ngrokCmd = new Label("    ngrok tcp 8765");
+        ngrokCmd.setStyle("-fx-font-family: monospace; -fx-background-color: #f0f0f0; -fx-padding: 6; -fx-font-size: 12px;");
+        Label s4detail2 = new Label("Copy the address it shows (e.g. 6.tcp.ngrok.io:13407) and share it with your teammates. Keep the terminal open for the whole session.");
+        s4detail2.setWrapText(true);
+
+        Label note = new Label("You only need to do steps 1–3 once. After that it's just step 4 every time you host.");
+        note.setWrapText(true);
+        note.setStyle("-fx-text-fill: #27ae60; -fx-font-weight: bold;");
+
+        Button closeBtn = new Button("Got it");
+        closeBtn.setDefaultButton(true);
+        closeBtn.setStyle("-fx-pref-width: 80px;");
+        closeBtn.setOnAction(e -> guide.close());
+        HBox btnRow = new HBox(closeBtn);
+
+        root.getChildren().addAll(
+                header, intro, new Separator(),
+                s1, s1detail,
+                s2, s2detail,
+                s3, s3detail, authtokenCmd,
+                s4, s4detail, ngrokCmd, s4detail2,
+                new Separator(), note, btnRow
+        );
+
+        guide.setScene(new Scene(root));
+        guide.showAndWait();
     }
 
     // ── Stop hosting ──────────────────────────────────────────────
