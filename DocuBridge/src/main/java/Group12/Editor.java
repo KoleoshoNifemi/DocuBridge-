@@ -209,11 +209,20 @@ public class Editor {
         startDeltaPoller();
     }
 
+    private int pollCounter = 0;
+
     private void startDeltaPoller() {
+        pollCounter = 0;
         PauseTransition poll = new PauseTransition(Duration.millis(80));
         poll.setOnFinished(e -> {
             if (!bridgeAttached || collabClient == null) return; // stopped
             try {
+                // Every ~4 seconds, print diagnostic regardless of content
+                if (pollCounter++ % 50 == 0) {
+                    Object elFound = quill.executeScript("document.getElementById('deltaComm') !== null");
+                    Object rawVal  = quill.executeScript("var _el=document.getElementById('deltaComm'); _el ? _el.value : 'ELEMENT_NOT_FOUND'");
+                    System.out.println("DEBUG heartbeat #" + pollCounter + ": el=" + elFound + ", val=[" + rawVal + "]");
+                }
                 String arrJson = (String) quill.executeScript(
                     "(function(){ var el=document.getElementById('deltaComm'); if(!el) return '[]'; var v=el.value||'[]'; el.value='[]'; return v; })()"
                 );

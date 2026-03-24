@@ -290,6 +290,7 @@
             var arr = JSON.parse(el.value || '[]');
             arr.push(JSON.stringify(delta));
             el.value = JSON.stringify(arr);
+            document.title = 'PENDING:' + arr.length; // debug: visible to executeScript
         }
     });
 
