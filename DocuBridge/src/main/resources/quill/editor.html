@@ -136,6 +136,7 @@
 <body>
 <div id="editor-container"></div>
 <textarea id="deltaComm" style="display:none"></textarea>
+<textarea id="incomingComm" style="display:none"></textarea>
 
 <script>
     var quill = new Quill('#editor-container', {
@@ -291,6 +292,25 @@
             el.value = JSON.stringify(arr);
         }
     });
+
+    // Poll for incoming deltas/full-content written by Java via the DOM
+    setInterval(function() {
+        var el = document.getElementById('incomingComm');
+        var v = el.value || '[]';
+        if (v === '[]') return;
+        el.value = '[]';
+        var msgs = JSON.parse(v);
+        for (var i = 0; i < msgs.length; i++) {
+            var msg = msgs[i];
+            try {
+                if (msg.op === 'delta') {
+                    quill.updateContents(JSON.parse(msg.data), 'api');
+                } else if (msg.op === 'full') {
+                    quill.setContents(JSON.parse(msg.data), 'api');
+                }
+            } catch (err) {}
+        }
+    }, 50);
 </script>
 </body>
 </html>

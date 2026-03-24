@@ -91,39 +91,39 @@ public class CollabClient extends WebSocketClient {
 
     private void applyRemoteDelta(String deltaJson, String fromUser) {
         Platform.runLater(() -> {
-            applyingRemote = true;
             try {
                 String escaped = escapeForJs(deltaJson);
                 quillEngine.executeScript(
                         "(function(){" +
-                                "  var delta = JSON.parse(\"" + escaped + "\");" +
-                                "  quill.updateContents(delta, 'api');" +
-                                "})();"
+                                "  var el=document.getElementById('incomingComm');" +
+                                "  if(!el) return;" +
+                                "  var arr=JSON.parse(el.value||'[]');" +
+                                "  arr.push({op:'delta',data:\"" + escaped + "\"});" +
+                                "  el.value=JSON.stringify(arr);" +
+                                "})()"
                 );
             } catch (Exception e) {
-                System.err.println("Failed to apply remote delta: " + e.getMessage());
-            } finally {
-                applyingRemote = false;
+                System.err.println("Failed to queue remote delta: " + e.getMessage());
             }
         });
     }
 
     private void applyFullContent(String contentJson) {
         Platform.runLater(() -> {
-            applyingRemote = true;
             try {
                 String escaped = escapeForJs(contentJson);
                 quillEngine.executeScript(
                         "(function(){" +
-                                "  var delta = JSON.parse(\"" + escaped + "\");" +
-                                "  quill.setContents(delta, 'api');" +
-                                "})();"
+                                "  var el=document.getElementById('incomingComm');" +
+                                "  if(!el) return;" +
+                                "  var arr=JSON.parse(el.value||'[]');" +
+                                "  arr.push({op:'full',data:\"" + escaped + "\"});" +
+                                "  el.value=JSON.stringify(arr);" +
+                                "})()"
                 );
                 System.out.println("✓ Synced full document from server");
             } catch (Exception e) {
-                System.err.println("Failed to apply full content: " + e.getMessage());
-            } finally {
-                applyingRemote = false;
+                System.err.println("Failed to queue full content: " + e.getMessage());
             }
         });
     }
