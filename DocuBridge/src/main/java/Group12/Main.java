@@ -344,6 +344,7 @@ public class Main extends Application {
 
     private void showRoomCodeDialog(String roomCode) {
         Alert alert = new Alert(Alert.AlertType.INFORMATION);
+        alert.initOwner(primaryStage);
         alert.setTitle("Session Started");
         alert.setHeaderText("Share with your teammates:");
 
