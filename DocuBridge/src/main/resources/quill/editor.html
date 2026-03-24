@@ -135,6 +135,7 @@
 </head>
 <body>
 <div id="editor-container"></div>
+<textarea id="deltaComm" style="display:none"></textarea>
 
 <script>
     var quill = new Quill('#editor-container', {
@@ -284,7 +285,10 @@
 
     quill.on('text-change', function (delta, oldDelta, source) {
         if (source === 'user') {
-            alert('DELTA:' + JSON.stringify(delta));
+            var el = document.getElementById('deltaComm');
+            var arr = JSON.parse(el.value || '[]');
+            arr.push(JSON.stringify(delta));
+            el.value = JSON.stringify(arr);
         }
     });
 </script>

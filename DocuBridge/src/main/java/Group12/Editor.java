@@ -51,13 +51,6 @@ public class Editor {
     private void initializeWebView() {
         webView = new WebView();
         quill = webView.getEngine();
-        quill.setOnAlert(event -> {
-            String data = event.getData();
-            System.out.println("DEBUG setOnAlert fired: " + data);
-            if (data != null && data.startsWith("DELTA:") && collabClient != null) {
-                collabClient.sendDelta(data.substring(6));
-            }
-        });
         String quillJsPath = getClass().getResource("/quill/editor.html").toExternalForm();
         quill.getLoadWorker().stateProperty().addListener((obs, old, newState) -> {
             if (newState == javafx.concurrent.Worker.State.SUCCEEDED) {
@@ -213,7 +206,29 @@ public class Editor {
     private void attachJsBridge() {
         bridgeAttached = true;
         System.out.println("✓ JS collab bridge attached");
-        quill.executeScript("alert('BRIDGE_TEST')");
+        startDeltaPoller();
+    }
+
+    private void startDeltaPoller() {
+        PauseTransition poll = new PauseTransition(Duration.millis(80));
+        poll.setOnFinished(e -> {
+            if (!bridgeAttached || collabClient == null) return; // stopped
+            try {
+                String arrJson = (String) quill.executeScript(
+                    "(function(){ var el=document.getElementById('deltaComm'); if(!el) return '[]'; var v=el.value||'[]'; el.value='[]'; return v; })()"
+                );
+                if (arrJson != null && !arrJson.equals("[]")) {
+                    JSONArray arr = new JSONArray(arrJson);
+                    for (int i = 0; i < arr.length(); i++) {
+                        collabClient.sendDelta(arr.getString(i));
+                    }
+                }
+            } catch (Exception ex) {
+                System.err.println("Delta poller error: " + ex.getMessage());
+            }
+            if (bridgeAttached && collabClient != null) poll.play(); // reschedule
+        });
+        poll.play();
     }
 
     public void disconnectCollab() {
