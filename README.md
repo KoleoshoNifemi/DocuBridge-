@@ -1,7 +1,8 @@
-# DocuBridge - Tharunkaarthik Gopinath, Abdulrehman Nasir, Shehyrar Usman, Koleosho Nifemi
+# DocuBridge
 
 A full-featured, collaborative desktop word processor built with JavaFX and Quill.js — featuring real-time multi-user editing over WebSocket, cloud-backed file storage on Azure SQL Server, and rich `.docx` export via Apache POI.
 
+Made by Tharunkaarthik Gopinath, Abdulrehman Nasir, Shehyrar Usman, and Koleosho Nifemi.
 ---
 
 ## Features
