@@ -42,6 +42,8 @@ public class Editor {
     private String serverHost;
     private String username;
     private boolean bridgeAttached = false;
+    private int lastSentCursorIndex  = -2; // -2 forces a send on first poll
+    private int lastSentCursorLength = 0;
     // ─────────────────────────────────────────────────────────────
 
     private double readDPI() {
@@ -219,22 +221,6 @@ public class Editor {
             "    var arr = JSON.parse(el.value || '[]');" +
             "    arr.push(JSON.stringify(delta));" +
             "    el.value = JSON.stringify(arr);" +
-            // After typing, the selection update is bundled with text-change so
-            // selection-change may not fire separately — capture cursor here too.
-            "    setTimeout(function() {" +
-            "      var sel = quill.getSelection();" +
-            "      var cel = document.getElementById('cursorComm');" +
-            "      if (sel && cel) cel.value = JSON.stringify({index: sel.index, length: sel.length});" +
-            "    }, 0);" +
-            "  });" +
-            // Remove source filter: Quill fires selection-change with 'api'/'silent'
-            // for arrow keys and programmatic moves, not just 'user'.
-            "  quill.on('selection-change', function(range, oldRange, source) {" +
-            "    var el = document.getElementById('cursorComm');" +
-            "    if (!el) return;" +
-            "    var idx = range ? range.index : -1;" +
-            "    var len = range ? range.length : 0;" +
-            "    el.value = JSON.stringify({index: idx, length: len});" +
             "  });" +
             "  return 'listener_added';" +
             "})()"
@@ -245,20 +231,32 @@ public class Editor {
     }
 
     private void startCursorPoller() {
+        lastSentCursorIndex  = -2;
+        lastSentCursorLength = 0;
         PauseTransition poll = new PauseTransition(Duration.millis(100));
         poll.setOnFinished(e -> {
             if (!bridgeAttached || collabClient == null) return;
             try {
+                // Read selection directly — no events, no textarea, no race conditions.
+                // Returns "index,length" or null if editor has no selection.
                 Object raw = quill.executeScript(
-                    "(function(){ var el=document.getElementById('cursorComm');" +
-                    "  if(!el||!el.value) return null; var v=el.value; el.value=''; return v; })()"
+                    "(function(){" +
+                    "  var s = quill.getSelection();" +
+                    "  return s ? s.index + ',' + s.length : null;" +
+                    "})()"
                 );
                 if (raw instanceof String) {
-                    org.json.JSONObject data = new org.json.JSONObject((String) raw);
-                    collabClient.sendCursor(data.getInt("index"), data.optInt("length", 0));
+                    String[] parts = ((String) raw).split(",");
+                    int idx = Integer.parseInt(parts[0].trim());
+                    int len = Integer.parseInt(parts[1].trim());
+                    if (idx != lastSentCursorIndex || len != lastSentCursorLength) {
+                        collabClient.sendCursor(idx, len);
+                        lastSentCursorIndex  = idx;
+                        lastSentCursorLength = len;
+                    }
                 }
             } catch (Exception ex) {
-                // ignore parse errors
+                // ignore
             }
             if (bridgeAttached && collabClient != null) poll.play();
         });
@@ -301,6 +299,8 @@ public class Editor {
 
     public void disconnectCollab() {
         bridgeAttached = false;
+        lastSentCursorIndex  = -2;
+        lastSentCursorLength = 0;
         try {
             quill.executeScript("if (typeof window.clearAllRemoteCursors === 'function') window.clearAllRemoteCursors();");
         } catch (Exception ignored) {}
