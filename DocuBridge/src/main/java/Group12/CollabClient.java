@@ -165,13 +165,17 @@ public class CollabClient extends WebSocketClient {
     private void applyRemoteCursor(String fromUser, int index, int length) {
         Platform.runLater(() -> {
             try {
+                // Pass username via setMember (handles special chars), but embed
+                // the index as a literal number in the JS string — if passed via
+                // setMember, JavaFX wraps it as a Java Integer object, making
+                // typeof index === "object" instead of "number", which causes
+                // Quill's getBounds to take the wrong branch and return null.
                 JSObject win = (JSObject) quillEngine.executeScript("window");
-                win.setMember("_cursorUser",  fromUser);
-                win.setMember("_cursorIndex", index);
+                win.setMember("_cursorUser", fromUser);
                 quillEngine.executeScript(
                     "(function(){" +
                     "  if (typeof window.updateRemoteCursor === 'function')" +
-                    "    window.updateRemoteCursor(window._cursorUser, window._cursorIndex);" +
+                    "    window.updateRemoteCursor(window._cursorUser, " + index + ");" +
                     "})()"
                 );
             } catch (Exception e) {
