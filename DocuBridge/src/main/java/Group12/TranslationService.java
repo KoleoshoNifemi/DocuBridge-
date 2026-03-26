@@ -3,6 +3,8 @@ package Group12;
 import okhttp3.*;
 import org.json.JSONArray;
 import org.json.JSONObject;
+import java.util.ArrayList;
+import java.util.List;
 
 public class TranslationService {
     private final String subscriptionKey;
@@ -75,5 +77,38 @@ public class TranslationService {
             e.printStackTrace();
             return null;
         }
+    }
+
+    /** Translates a list of strings in a single API call, preserving order. Returns null on failure. */
+    public List<String> translateBatch(List<String> texts, String from, String to) {
+        if (texts == null || texts.isEmpty()) return new ArrayList<>();
+        try {
+            JSONArray body = new JSONArray();
+            for (String text : texts) body.put(new JSONObject().put("Text", text));
+
+            String url = endpoint + "/translate?api-version=3.0&from=" + from + "&to=" + to;
+            Request request = new Request.Builder()
+                    .url(url)
+                    .post(RequestBody.create(body.toString(), MediaType.parse("application/json")))
+                    .addHeader("Ocp-Apim-Subscription-Key", subscriptionKey)
+                    .addHeader("Ocp-Apim-Subscription-Region", region)
+                    .addHeader("Content-Type", "application/json")
+                    .build();
+
+            Response response = client.newCall(request).execute();
+            if (response.isSuccessful() && response.body() != null) {
+                JSONArray jsonResponse = new JSONArray(response.body().string());
+                List<String> results = new ArrayList<>();
+                for (int i = 0; i < jsonResponse.length(); i++) {
+                    results.add(jsonResponse.getJSONObject(i)
+                            .getJSONArray("translations").getJSONObject(0).getString("text"));
+                }
+                return results;
+            }
+            System.err.println("Batch translation API error: " + response.code());
+        } catch (Exception e) {
+            System.err.println("Batch translation exception: " + e.getMessage());
+        }
+        return null;
     }
 }

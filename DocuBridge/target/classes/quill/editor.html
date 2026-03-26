@@ -386,6 +386,10 @@
     quill.on('text-change', function (delta, oldDelta, source) {
         window._tcCount = (window._tcCount || 0) + 1;
         window._lastSource = source;
+        // Track content version for translation poller; suppress during translation application
+        if (!window._applyingTranslation) {
+            window._translationVersion = (window._translationVersion || 0) + 1;
+        }
     });
 
     // Poll for incoming deltas/full-content written by Java via the DOM

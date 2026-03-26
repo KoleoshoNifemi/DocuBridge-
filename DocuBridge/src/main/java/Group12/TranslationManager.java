@@ -1,6 +1,10 @@
 package Group12;
 
 import javafx.application.Platform;
+import org.json.JSONArray;
+import org.json.JSONObject;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.function.Consumer;
 
 public class TranslationManager {
@@ -88,6 +92,70 @@ public class TranslationManager {
                     System.out.println("DEBUG: Exception in translation, returning original");
                     callback.accept(text);
                 });
+            }
+        }, "translator").start();
+    }
+
+    /**
+     * Translates a Quill delta JSON string, preserving all formatting attributes.
+     * Only the text content of each run is translated; bold/italic/color/highlight/
+     * header/list/image ops etc. are left untouched.
+     * Callback is called on the JavaFX Application Thread with the new delta JSON.
+     */
+    public void translateDeltaAsync(String deltaJson, Consumer<String> callback) {
+        if (targetLanguage == null || deltaJson == null || deltaJson.trim().isEmpty()) {
+            Platform.runLater(() -> callback.accept(deltaJson));
+            return;
+        }
+        new Thread(() -> {
+            try {
+                JSONObject delta = new JSONObject(deltaJson);
+                JSONArray ops = delta.getJSONArray("ops");
+
+                // Collect indices and text of ops that need translation (skip \n and image ops)
+                List<Integer> textOpIndices = new ArrayList<>();
+                List<String>  textsToTranslate = new ArrayList<>();
+                for (int i = 0; i < ops.length(); i++) {
+                    JSONObject op = ops.getJSONObject(i);
+                    if (!op.has("insert")) continue;
+                    Object insert = op.get("insert");
+                    if (!(insert instanceof String)) continue;       // skip image/embed ops
+                    String text = (String) insert;
+                    if (text.isEmpty() || text.equals("\n")) continue; // skip bare newlines
+                    textOpIndices.add(i);
+                    textsToTranslate.add(text);
+                }
+
+                if (textsToTranslate.isEmpty()) {
+                    Platform.runLater(() -> callback.accept(deltaJson));
+                    return;
+                }
+
+                List<String> translated = translationService.translateBatch(textsToTranslate, sourceLanguage, targetLanguage);
+                if (translated == null || translated.size() != textsToTranslate.size()) {
+                    Platform.runLater(() -> callback.accept(deltaJson));
+                    return;
+                }
+
+                // Rebuild ops with translated text, all attributes unchanged
+                JSONArray newOps = new JSONArray();
+                int ptr = 0;
+                for (int i = 0; i < ops.length(); i++) {
+                    JSONObject op = new JSONObject(ops.getJSONObject(i).toString()); // clone
+                    if (ptr < textOpIndices.size() && textOpIndices.get(ptr) == i) {
+                        op.put("insert", translated.get(ptr++));
+                    }
+                    newOps.put(op);
+                }
+
+                JSONObject newDelta = new JSONObject();
+                newDelta.put("ops", newOps);
+                final String result = newDelta.toString();
+                Platform.runLater(() -> callback.accept(result));
+
+            } catch (Exception e) {
+                System.err.println("Delta translation error: " + e.getMessage());
+                Platform.runLater(() -> callback.accept(deltaJson));
             }
         }, "translator").start();
     }

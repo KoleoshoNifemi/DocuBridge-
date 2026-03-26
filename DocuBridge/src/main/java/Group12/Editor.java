@@ -225,7 +225,13 @@ public class Editor {
     }
 
     private void startTranslationPoller() {
-        PauseTransition poll = new PauseTransition(Duration.millis(1500));
+        // pendingVersion[0] tracks the last _translationVersion value we observed changing.
+        // lastChangeTime[0] is the wall-clock ms when that change was first seen.
+        // We only fire a translation once the version has been STABLE for ≥1 s (debounce).
+        final long[] lastChangeTime  = {0};
+        final int[]  pendingVersion  = {-1};
+
+        PauseTransition poll = new PauseTransition(Duration.millis(500));
         poll.setOnFinished(e -> {
             if (!bridgeAttached || collabClient == null) return;
             if (translationManager == null || !translationManager.isTranslationEnabled()) {
@@ -235,19 +241,27 @@ public class Editor {
             try {
                 Object vObj = quill.executeScript("window._translationVersion || 0");
                 int v = vObj instanceof Number ? ((Number) vObj).intValue() : 0;
-                if (v != lastTranslationVersion) {
+                long now = System.currentTimeMillis();
+
+                if (v != pendingVersion[0]) {
+                    // Content just changed — start / reset the debounce timer
+                    pendingVersion[0]  = v;
+                    lastChangeTime[0]  = now;
+                } else if (v != lastTranslationVersion && (now - lastChangeTime[0]) >= 1000) {
+                    // Version has been stable for 1 s — translate
                     lastTranslationVersion = v;
-                    String text = (String) quill.executeScript("quill.getText()");
-                    if (text != null && !text.trim().isEmpty()) {
-                        translationManager.translatePlainText(text, translated -> {
-                            Platform.runLater(() -> {
-                                String escaped = escapeForJavaScript(translated);
-                                quill.executeScript(
-                                    "window._applyingTranslation = true;" +
-                                    "quill.setText('" + escaped + "');" +
-                                    "window._applyingTranslation = false;"
-                                );
-                            });
+                    String deltaJson = (String) quill.executeScript("JSON.stringify(quill.getContents())");
+                    if (deltaJson != null) {
+                        translationManager.translateDeltaAsync(deltaJson, translatedDelta -> {
+                            // callback already runs on FX thread via Platform.runLater inside translateDeltaAsync
+                            JSObject win = (JSObject) quill.executeScript("window");
+                            win.setMember("_pendingTranslatedDelta", translatedDelta);
+                            quill.executeScript(
+                                "window._applyingTranslation = true;" +
+                                "try { quill.setContents(JSON.parse(window._pendingTranslatedDelta), 'api'); } catch(e){}" +
+                                "window._applyingTranslation = false;" +
+                                "window._pendingTranslatedDelta = null;"
+                            );
                         });
                     }
                 }
@@ -546,22 +560,21 @@ public class Editor {
     private void retranslate(String langCode, String source) {
         if (translationManager == null || !isCollabConnected()) return;
 
-        // Read directly from Quill — don't rely on originalText which may not be set yet
-        String textToTranslate = (String) quill.executeScript("quill.getText()");
-        if (textToTranslate == null || textToTranslate.trim().isEmpty()) return;
+        String deltaJson = (String) quill.executeScript("JSON.stringify(quill.getContents())");
+        if (deltaJson == null) return;
 
-        // Force the translation poller to re-translate by bumping the seen version back
-        lastTranslationVersion = -1;
+        lastTranslationVersion = -1; // force re-translate on next poller tick too
 
-        translationManager.translatePlainText(textToTranslate, translated -> {
-            Platform.runLater(() -> {
-                String escaped = escapeForJavaScript(translated);
-                quill.executeScript(
-                    "window._applyingTranslation = true;" +
-                    "quill.setText('" + escaped + "');" +
-                    "window._applyingTranslation = false;"
-                );
-            });
+        translationManager.translateDeltaAsync(deltaJson, translatedDelta -> {
+            // callback already on FX thread
+            JSObject win = (JSObject) quill.executeScript("window");
+            win.setMember("_pendingTranslatedDelta", translatedDelta);
+            quill.executeScript(
+                "window._applyingTranslation = true;" +
+                "try { quill.setContents(JSON.parse(window._pendingTranslatedDelta), 'api'); } catch(e){}" +
+                "window._applyingTranslation = false;" +
+                "window._pendingTranslatedDelta = null;"
+            );
         });
     }
 
