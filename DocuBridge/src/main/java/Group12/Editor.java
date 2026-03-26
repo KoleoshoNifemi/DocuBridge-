@@ -219,9 +219,17 @@ public class Editor {
             "    var arr = JSON.parse(el.value || '[]');" +
             "    arr.push(JSON.stringify(delta));" +
             "    el.value = JSON.stringify(arr);" +
+            // After typing, the selection update is bundled with text-change so
+            // selection-change may not fire separately — capture cursor here too.
+            "    setTimeout(function() {" +
+            "      var sel = quill.getSelection();" +
+            "      var cel = document.getElementById('cursorComm');" +
+            "      if (sel && cel) cel.value = JSON.stringify({index: sel.index, length: sel.length});" +
+            "    }, 0);" +
             "  });" +
+            // Remove source filter: Quill fires selection-change with 'api'/'silent'
+            // for arrow keys and programmatic moves, not just 'user'.
             "  quill.on('selection-change', function(range, oldRange, source) {" +
-            "    if (source !== 'user') return;" +
             "    var el = document.getElementById('cursorComm');" +
             "    if (!el) return;" +
             "    var idx = range ? range.index : -1;" +

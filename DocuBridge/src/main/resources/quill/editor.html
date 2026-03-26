@@ -295,6 +295,8 @@
 
         window.updateRemoteCursor = function(username, index) {
             if (index < 0) { window.removeRemoteCursor(username); return; }
+            // Clamp to valid range so getBounds never throws
+            var safeIndex = Math.min(index, Math.max(0, quill.getLength() - 1));
             var color = colorFor(username);
             if (!cursors[username]) {
                 var caret = document.createElement('div');
@@ -309,7 +311,7 @@
                 cursors[username] = { caret: caret, label: label };
             }
             try {
-                var b = quill.getBounds(index);
+                var b = quill.getBounds(safeIndex);
                 var c = cursors[username];
                 c.caret.style.left   = b.left + 'px';
                 c.caret.style.top    = b.top + 'px';
