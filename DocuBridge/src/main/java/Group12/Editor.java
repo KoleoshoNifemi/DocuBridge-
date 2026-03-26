@@ -220,11 +220,41 @@ public class Editor {
             "    arr.push(JSON.stringify(delta));" +
             "    el.value = JSON.stringify(arr);" +
             "  });" +
+            "  quill.on('selection-change', function(range, oldRange, source) {" +
+            "    if (source !== 'user') return;" +
+            "    var el = document.getElementById('cursorComm');" +
+            "    if (!el) return;" +
+            "    var idx = range ? range.index : -1;" +
+            "    var len = range ? range.length : 0;" +
+            "    el.value = JSON.stringify({index: idx, length: len});" +
+            "  });" +
             "  return 'listener_added';" +
             "})()"
         );
         System.out.println("DEBUG attachJsBridge listener registration: " + reg);
         startDeltaPoller();
+        startCursorPoller();
+    }
+
+    private void startCursorPoller() {
+        PauseTransition poll = new PauseTransition(Duration.millis(100));
+        poll.setOnFinished(e -> {
+            if (!bridgeAttached || collabClient == null) return;
+            try {
+                Object raw = quill.executeScript(
+                    "(function(){ var el=document.getElementById('cursorComm');" +
+                    "  if(!el||!el.value) return null; var v=el.value; el.value=''; return v; })()"
+                );
+                if (raw instanceof String) {
+                    org.json.JSONObject data = new org.json.JSONObject((String) raw);
+                    collabClient.sendCursor(data.getInt("index"), data.optInt("length", 0));
+                }
+            } catch (Exception ex) {
+                // ignore parse errors
+            }
+            if (bridgeAttached && collabClient != null) poll.play();
+        });
+        poll.play();
     }
 
     private int pollCounter = 0;
@@ -263,6 +293,9 @@ public class Editor {
 
     public void disconnectCollab() {
         bridgeAttached = false;
+        try {
+            quill.executeScript("if (typeof window.clearAllRemoteCursors === 'function') window.clearAllRemoteCursors();");
+        } catch (Exception ignored) {}
         if (collabClient != null && collabClient.isOpen()) {
             try { collabClient.closeBlocking(); } catch (InterruptedException ignored) {}
         }

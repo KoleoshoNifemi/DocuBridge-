@@ -28,14 +28,16 @@ import java.util.Set;
  *
  * Message protocol (JSON):
  *   Client -> Server:
- *     { "type": "join",  "fileName": "myfile.docx", "username": "tharun" }
- *     { "type": "delta", "fileName": "myfile.docx", "delta": <quill delta JSON> }
- *     { "type": "full",  "fileName": "myfile.docx", "content": <full delta JSON> }
+ *     { "type": "join",   "fileName": "myfile.docx", "username": "tharun" }
+ *     { "type": "delta",  "fileName": "myfile.docx", "delta": <quill delta JSON> }
+ *     { "type": "full",   "fileName": "myfile.docx", "content": <full delta JSON> }
+ *     { "type": "cursor", "fileName": "myfile.docx", "index": 42, "length": 0 }
  *
  *   Server -> Client:
  *     { "type": "delta",    "fileName": "...", "delta": ..., "username": "..." }
  *     { "type": "full",     "fileName": "...", "content": ..., "username": "..." }
  *     { "type": "userlist", "fileName": "...", "users": ["tharun", "jane", ...] }
+ *     { "type": "cursor",   "fileName": "...", "username": "...", "index": 42, "length": 0 }
  */
 public class CollabServer extends WebSocketServer {
 
@@ -61,9 +63,10 @@ public class CollabServer extends WebSocketServer {
         try {
             JSONObject msg = new JSONObject(message);
             switch (msg.getString("type")) {
-                case "join"  -> handleJoin(conn, msg);
-                case "delta" -> handleDelta(conn, msg);
-                case "full"  -> handleFull(conn, msg);
+                case "join"   -> handleJoin(conn, msg);
+                case "delta"  -> handleDelta(conn, msg);
+                case "full"   -> handleFull(conn, msg);
+                case "cursor" -> handleCursor(conn, msg);
             }
         } catch (Exception e) {
             System.err.println("Error handling message: " + e.getMessage());
@@ -128,6 +131,19 @@ public class CollabServer extends WebSocketServer {
 
     private void handleFull(WebSocket conn, JSONObject msg) {
         latestContent.put(msg.getString("fileName"), msg.getString("content"));
+    }
+
+    private void handleCursor(WebSocket conn, JSONObject msg) {
+        String fileName = connToFile.get(conn);
+        if (fileName == null) return;
+        msg.put("username", usernames.getOrDefault(conn, "unknown"));
+        Set<WebSocket> room = documentRooms.get(fileName);
+        if (room == null) return;
+        synchronized (room) {
+            for (WebSocket client : room) {
+                if (client != conn && client.isOpen()) client.send(msg.toString());
+            }
+        }
     }
 
     @Override

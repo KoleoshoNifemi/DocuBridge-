@@ -9,6 +9,10 @@ import org.json.JSONArray;
 import org.json.JSONObject;
 
 import java.net.URI;
+import java.util.ArrayList;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Set;
 import java.util.function.Consumer;
 
 /**
@@ -27,6 +31,7 @@ public class CollabClient extends WebSocketClient {
     private Consumer<String[]> onUsersChanged;
     private Consumer<String>   onFileNameChanged;
     private volatile boolean applyingRemote = false;
+    private List<String> knownUsers = new ArrayList<>();
 
     public CollabClient(URI serverUri, String username, String fileName, WebEngine quillEngine) {
         super(serverUri);
@@ -62,6 +67,7 @@ public class CollabClient extends WebSocketClient {
                 case "delta"    -> applyRemoteDelta(msg.getString("delta"), msg.getString("username"));
                 case "full"     -> applyFullContent(msg.getString("content"));
                 case "userlist" -> handleUserList(msg.getJSONArray("users"));
+                case "cursor"   -> applyRemoteCursor(msg.getString("username"), msg.getInt("index"), msg.optInt("length", 0));
             }
         } catch (Exception e) {
             System.err.println("CollabClient message error: " + e.getMessage());
@@ -76,6 +82,16 @@ public class CollabClient extends WebSocketClient {
     @Override
     public void onError(Exception ex) {
         System.err.println("CollabClient error: " + ex.getMessage());
+    }
+
+    public void sendCursor(int index, int length) {
+        if (!isOpen()) return;
+        JSONObject msg = new JSONObject();
+        msg.put("type",     "cursor");
+        msg.put("fileName", fileName);
+        msg.put("index",    index);
+        msg.put("length",   length);
+        send(msg.toString());
     }
 
     public void sendDelta(String deltaJson) {
@@ -146,6 +162,24 @@ public class CollabClient extends WebSocketClient {
         });
     }
 
+    private void applyRemoteCursor(String fromUser, int index, int length) {
+        Platform.runLater(() -> {
+            try {
+                JSObject win = (JSObject) quillEngine.executeScript("window");
+                win.setMember("_cursorUser",  fromUser);
+                win.setMember("_cursorIndex", index);
+                quillEngine.executeScript(
+                    "(function(){" +
+                    "  if (typeof window.updateRemoteCursor === 'function')" +
+                    "    window.updateRemoteCursor(window._cursorUser, window._cursorIndex);" +
+                    "})()"
+                );
+            } catch (Exception e) {
+                System.err.println("Failed to apply remote cursor: " + e.getMessage());
+            }
+        });
+    }
+
     private void handleJoined(String serverFileName) {
         if (!this.fileName.equals(serverFileName)) {
             System.out.println("✓ Redirected to file: " + serverFileName);
@@ -157,6 +191,32 @@ public class CollabClient extends WebSocketClient {
     }
 
     private void handleUserList(JSONArray users) {
+        // Build the current user set
+        Set<String> currentSet = new HashSet<>();
+        for (int i = 0; i < users.length(); i++) currentSet.add(users.getString(i));
+
+        // Find users who left and need their cursor removed
+        List<String> departed = new ArrayList<>();
+        for (String u : knownUsers) {
+            if (!currentSet.contains(u) && !u.equals(username)) departed.add(u);
+        }
+        if (!departed.isEmpty()) {
+            Platform.runLater(() -> {
+                for (String u : departed) {
+                    try {
+                        JSObject win = (JSObject) quillEngine.executeScript("window");
+                        win.setMember("_removeCursorUser", u);
+                        quillEngine.executeScript(
+                            "if (typeof window.removeRemoteCursor === 'function')" +
+                            "  window.removeRemoteCursor(window._removeCursorUser);"
+                        );
+                    } catch (Exception ignored) {}
+                }
+            });
+        }
+
+        knownUsers = new ArrayList<>(currentSet);
+
         if (onUsersChanged == null) return;
         String[] userArray = new String[users.length()];
         for (int i = 0; i < users.length(); i++) userArray[i] = users.getString(i);

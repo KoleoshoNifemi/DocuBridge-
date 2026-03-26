@@ -131,12 +131,36 @@
         .ql-container.ql-snow {
             border: none !important;
         }
+
+        /* ── Remote cursor overlays ─────────────────────────────── */
+        .remote-cursor-caret {
+            position: absolute;
+            width: 2px;
+            pointer-events: none;
+            z-index: 1000;
+        }
+        .remote-cursor-label {
+            position: absolute;
+            padding: 2px 6px;
+            border-radius: 3px;
+            font-size: 11px;
+            font-family: Arial, sans-serif;
+            white-space: nowrap;
+            color: white;
+            pointer-events: none;
+            z-index: 1000;
+            line-height: 1.4;
+            font-weight: 500;
+            opacity: 0.88;
+        }
+        /* ──────────────────────────────────────────────────────── */
     </style>
 </head>
 <body>
 <div id="editor-container"></div>
 <textarea id="deltaComm" style="display:none"></textarea>
 <textarea id="incomingComm" style="display:none"></textarea>
+<textarea id="cursorComm" style="display:none"></textarea>
 
 <script>
     var quill = new Quill('#editor-container', {
@@ -237,6 +261,79 @@
     window.getBounds = function(index) {
         return quill.getBounds(index);
     };
+
+    // ── Remote cursor overlay ────────────────────────────────────
+    (function() {
+        var container = document.getElementById('editor-container');
+        container.style.position = 'relative';
+
+        var cursorLayer = document.createElement('div');
+        cursorLayer.id = 'cursor-layer';
+        cursorLayer.style.cssText = 'position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:none;overflow:visible;z-index:500;';
+        container.appendChild(cursorLayer);
+
+        // Deterministic color palette — visually distinct, good contrast on white
+        var palette = [
+            '#e74c3c','#3498db','#2ecc71','#9b59b6','#f39c12',
+            '#1abc9c','#e67e22','#c0392b','#2980b9','#27ae60',
+            '#8e44ad','#d35400','#16a085','#2471a3','#cb4335'
+        ];
+        var userColorMap = {};
+        function colorFor(username) {
+            if (!userColorMap[username]) {
+                var h = 0;
+                for (var i = 0; i < username.length; i++) {
+                    h = (h << 5) - h + username.charCodeAt(i);
+                    h |= 0;
+                }
+                userColorMap[username] = palette[Math.abs(h) % palette.length];
+            }
+            return userColorMap[username];
+        }
+
+        var cursors = {};
+
+        window.updateRemoteCursor = function(username, index) {
+            if (index < 0) { window.removeRemoteCursor(username); return; }
+            var color = colorFor(username);
+            if (!cursors[username]) {
+                var caret = document.createElement('div');
+                caret.className = 'remote-cursor-caret';
+                caret.style.background = color;
+                var label = document.createElement('div');
+                label.className = 'remote-cursor-label';
+                label.textContent = username;
+                label.style.background = color;
+                cursorLayer.appendChild(caret);
+                cursorLayer.appendChild(label);
+                cursors[username] = { caret: caret, label: label };
+            }
+            try {
+                var b = quill.getBounds(index);
+                var c = cursors[username];
+                c.caret.style.left   = b.left + 'px';
+                c.caret.style.top    = b.top + 'px';
+                c.caret.style.height = b.height + 'px';
+                var labelTop = b.top > 22 ? b.top - 22 : b.top + b.height + 2;
+                c.label.style.left = b.left + 'px';
+                c.label.style.top  = labelTop + 'px';
+            } catch(e) {}
+        };
+
+        window.removeRemoteCursor = function(username) {
+            if (cursors[username]) {
+                cursors[username].caret.remove();
+                cursors[username].label.remove();
+                delete cursors[username];
+                delete userColorMap[username];
+            }
+        };
+
+        window.clearAllRemoteCursors = function() {
+            Object.keys(cursors).forEach(function(u) { window.removeRemoteCursor(u); });
+        };
+    })();
+    // ────────────────────────────────────────────────────────────
 
     quill.root.addEventListener('keydown', function(e) {
         const selection = quill.getSelection();
