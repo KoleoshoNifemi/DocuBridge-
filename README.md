@@ -2,6 +2,8 @@
 
 A full-featured, collaborative desktop word processor built with JavaFX and Quill.js — featuring real-time multi-user editing over WebSocket, cloud-backed file storage on Azure SQL Server, and rich `.docx` export via Apache POI.
 
+Created by Tharunkaarthik Gopinath, Abdulrehman Nasir, Shehryar Usman, and Koleosho Nifemi.
+
 ---
 
 ## Features
