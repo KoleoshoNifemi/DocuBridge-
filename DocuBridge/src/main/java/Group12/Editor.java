@@ -46,6 +46,7 @@ public class Editor {
     private boolean bridgeAttached = false;
     private int lastSentCursorIndex  = -2;
     private int lastSentCursorLength = 0;
+    private int lastTranslationVersion = -1;
 
     private double readDPI() {
         return Screen.getPrimary().getDpi();
@@ -217,8 +218,43 @@ public class Editor {
                         "})()"
         );
         System.out.println("DEBUG attachJsBridge listener registration: " + reg);
+        lastTranslationVersion = -1;
         startDeltaPoller();
         startCursorPoller();
+        startTranslationPoller();
+    }
+
+    private void startTranslationPoller() {
+        PauseTransition poll = new PauseTransition(Duration.millis(1500));
+        poll.setOnFinished(e -> {
+            if (!bridgeAttached || collabClient == null) return;
+            if (translationManager == null || !translationManager.isTranslationEnabled()) {
+                if (bridgeAttached && collabClient != null) poll.play();
+                return;
+            }
+            try {
+                Object vObj = quill.executeScript("window._translationVersion || 0");
+                int v = vObj instanceof Number ? ((Number) vObj).intValue() : 0;
+                if (v != lastTranslationVersion) {
+                    lastTranslationVersion = v;
+                    String text = (String) quill.executeScript("quill.getText()");
+                    if (text != null && !text.trim().isEmpty()) {
+                        translationManager.translatePlainText(text, translated -> {
+                            Platform.runLater(() -> {
+                                String escaped = escapeForJavaScript(translated);
+                                quill.executeScript(
+                                    "window._applyingTranslation = true;" +
+                                    "quill.setText('" + escaped + "');" +
+                                    "window._applyingTranslation = false;"
+                                );
+                            });
+                        });
+                    }
+                }
+            } catch (Exception ex) { /* ignore */ }
+            if (bridgeAttached && collabClient != null) poll.play();
+        });
+        poll.play();
     }
 
     private void startCursorPoller() {
@@ -272,54 +308,9 @@ public class Editor {
                 );
 
                 if (arrJson != null && !arrJson.equals("[]")) {
-                    System.out.println("DEBUG: ✓ Found deltas: " + arrJson.substring(0, Math.min(100, arrJson.length())));
                     JSONArray arr = new JSONArray(arrJson);
                     for (int i = 0; i < arr.length(); i++) {
                         collabClient.sendDelta(arr.getString(i));
-                    }
-
-                    // Get current text
-                    String currentText = (String) quill.executeScript("quill.getText()");
-                    originalText = currentText;
-                    System.out.println("DEBUG: Stored original text: " + currentText);
-
-                    // Check translation
-                    if (translationManager != null) {
-                        System.out.println("DEBUG: translationManager is NOT null");
-                        boolean isEnabled = translationManager.isTranslationEnabled();
-                        System.out.println("DEBUG: Translation enabled? " + isEnabled);
-
-                        if (isEnabled) {
-                            System.out.println("DEBUG: Translation IS enabled, target language: " + translationManager.getTargetLanguage());
-                            System.out.println("DEBUG: Translating from original: " + originalText);
-                            translationManager.translatePlainText(originalText, translatedText -> {
-                                System.out.println("DEBUG: Translation callback received with: " + translatedText);
-                                Platform.runLater(() -> {
-                                    System.out.println("DEBUG: Updating editor UI with translated text");
-                                    Object selection = quill.executeScript("quill.getSelection()");
-                                    JSObject selObj = (JSObject) selection;
-                                    int cursorPos = 0;
-                                    if (selObj != null) {
-                                        Object indexObj = selObj.getMember("index");
-                                        if (indexObj instanceof Number) {
-                                            cursorPos = ((Number) indexObj).intValue();
-                                        }
-                                    }
-
-                                    String escaped = escapeForJavaScript(translatedText);
-                                    System.out.println("DEBUG: Setting text to: " + escaped);
-                                    quill.executeScript(
-                                            "quill.setText('" + escaped + "');" +
-                                                    "quill.setSelection(" + Math.min(cursorPos, translatedText.length()) + ", 0);"
-                                    );
-                                    System.out.println("DEBUG: Text updated successfully");
-                                });
-                            });
-                        } else {
-                            System.out.println("DEBUG: Translation NOT enabled");
-                        }
-                    } else {
-                        System.out.println("DEBUG: ✗ translationManager is NULL!");
                     }
                 }
             } catch (Exception ex) {
@@ -334,8 +325,10 @@ public class Editor {
     public void disconnectCollab() {
         System.out.println("DEBUG: disconnectCollab called");
         bridgeAttached = false;
-        lastSentCursorIndex  = -2;
-        lastSentCursorLength = 0;
+        lastSentCursorIndex    = -2;
+        lastSentCursorLength   = 0;
+        lastTranslationVersion = -1;
+        if (translationManager != null) translationManager.disableTranslation();
         try {
             quill.executeScript("if (typeof window.clearAllRemoteCursors === 'function') window.clearAllRemoteCursors();");
         } catch (Exception ignored) {}
@@ -538,41 +531,36 @@ public class Editor {
     private void search(String text) {}
 
     private void toggleTranslation(String langCode, String action) {
-        System.out.println("DEBUG: toggleTranslation called - langCode=" + langCode + ", action=" + action);
-        if (translationManager == null) {
-            System.out.println("DEBUG: ✗ translationManager is null!");
-            return;
-        }
+        if (translationManager == null) return;
         if ("disable".equals(action)) {
-            System.out.println("DEBUG: Disabling translation");
             translationManager.disableTranslation();
         } else if ("enable".equals(action)) {
-            System.out.println("DEBUG: Enabling translation for " + langCode);
+            if (!isCollabConnected()) {
+                System.out.println("Translation is only available during collaboration.");
+                return;
+            }
             translationManager.enableTranslation(langCode);
         }
     }
 
     private void retranslate(String langCode, String source) {
-        System.out.println("DEBUG: retranslate called - langCode=" + langCode);
-        if (translationManager == null) {
-            System.out.println("DEBUG: ✗ translationManager is null!");
-            return;
-        }
-        if (originalText.isEmpty()) {
-            System.out.println("DEBUG: ✗ originalText is empty!");
-            return;
-        }
+        if (translationManager == null || !isCollabConnected()) return;
 
-        System.out.println("DEBUG: Re-translating from original: " + originalText);
-        translationManager.translatePlainText(originalText, translatedText -> {
-            System.out.println("DEBUG: Retranslate callback received: " + translatedText);
+        // Read directly from Quill — don't rely on originalText which may not be set yet
+        String textToTranslate = (String) quill.executeScript("quill.getText()");
+        if (textToTranslate == null || textToTranslate.trim().isEmpty()) return;
+
+        // Force the translation poller to re-translate by bumping the seen version back
+        lastTranslationVersion = -1;
+
+        translationManager.translatePlainText(textToTranslate, translated -> {
             Platform.runLater(() -> {
-                String escaped = escapeForJavaScript(translatedText);
+                String escaped = escapeForJavaScript(translated);
                 quill.executeScript(
-                        "quill.setText('" + escaped + "');" +
-                                "quill.setSelection(0, 0);"
+                    "window._applyingTranslation = true;" +
+                    "quill.setText('" + escaped + "');" +
+                    "window._applyingTranslation = false;"
                 );
-                System.out.println("DEBUG: Re-translation complete");
             });
         });
     }
