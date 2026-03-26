@@ -402,6 +402,11 @@ public class Toolbar {
                     Runnable fn = voidFunctions.get("redo");
                     if (fn != null) fn.run();
                 });
+            } else if (name.equals("Find")) {
+                item.setOnAction(event -> {
+                    Runnable fn = voidFunctions.get("showSearch");
+                    if (fn != null) fn.run();
+                });
             }
             menu.getItems().add(item);
         }

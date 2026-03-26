@@ -37,6 +37,8 @@ public class Editor {
     private VBox editorWrapper;
     private ClipboardHandler clipboardHandler;
 
+    // ── Search field ──────────────────────────────────────────────
+    private WordSearch wordSearch;
     // ── Collab fields ─────────────────────────────────────────────
     private CollabClient collabClient;
     private String serverHost;
@@ -517,7 +519,7 @@ public class Editor {
                     case C -> { event.consume(); clipboardHandler.handleCopy(); }
                     case X -> { event.consume(); clipboardHandler.handleCut(); }
                     case V -> { event.consume(); clipboardHandler.handlePaste(); }
-                    case F -> { event.consume(); new WordSearch(this::quillExecute, () -> { Object t = quill.executeScript("window.getCachedDocumentText()"); return t != null ? t.toString() : ""; }, this.webView).showSearchPopup(); }
+                    case F -> { event.consume(); showSearch(); }
                     case EQUALS -> { event.consume(); if (event.isShiftDown()) fontSizeShortcut("+", "user"); }
                     case MINUS  -> { event.consume(); if (event.isShiftDown()) fontSizeShortcut("-", "user"); }
                 }
@@ -565,6 +567,7 @@ public class Editor {
         if (save     != null) temp.put("save",     save);
         if (newFile  != null) temp.put("newFile",  newFile);
         if (openFile != null) temp.put("openFile", openFile);
+        temp.put("showSearch",  this::showSearch);
         if (showCollabDialog != null) temp.put("showCollabDialog", showCollabDialog);
         if (stopHosting      != null) temp.put("stopHosting",      stopHosting);
         if (disconnectCollab != null) temp.put("disconnectCollab", disconnectCollab);
@@ -575,6 +578,17 @@ public class Editor {
         HashMap<String, Callable<Object>> temp = new HashMap<>();
         temp.put("getFormats", this::getFormats);
         return temp;
+    }
+
+    private void showSearch() {
+        if (wordSearch == null) {
+            wordSearch = new WordSearch(
+                this::quillExecute,
+                () -> { Object t = quill.executeScript("window.getCachedDocumentText()"); return t != null ? t.toString() : ""; },
+                webView
+            );
+        }
+        wordSearch.showSearchPopup();
     }
 
     private void quillExecute(String script, Boolean repaint) {

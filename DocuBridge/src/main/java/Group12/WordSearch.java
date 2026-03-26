@@ -4,6 +4,9 @@ import javafx.application.Platform;
 import javafx.geometry.Insets;
 import javafx.scene.Scene;
 import javafx.scene.control.*;
+import javafx.geometry.Orientation;
+import javafx.geometry.Pos;
+import javafx.scene.control.Separator;
 import javafx.scene.input.KeyCode;
 import javafx.scene.layout.*;
 import javafx.stage.Stage;
@@ -27,6 +30,7 @@ public class WordSearch {
 
     private Stage searchStage;
     private TextField searchField;
+    private TextField replaceField;
     private CheckBox regexBox;
     private Label countLabel;
 
@@ -54,23 +58,35 @@ public class WordSearch {
 
             // UI Elements
             searchField = new TextField(lastSearch);
+            searchField.setPrefWidth(200);
+            replaceField = new TextField();
+            replaceField.setPrefWidth(200);
             regexBox = new CheckBox("Regex");
             regexBox.setSelected(lastRegexState);
             countLabel = new Label("0/0");
-            Button nextBtn = new Button("Next");
-            Button prevBtn = new Button("Prev");
+            Button nextBtn    = new Button("Next");
+            Button prevBtn    = new Button("Prev");
+            Button replaceBtn    = new Button("Replace");
+            Button replaceAllBtn = new Button("Replace All");
 
             // Layout
-            HBox top = new HBox(8, new Label("Find:"), searchField, regexBox);
-            HBox bot = new HBox(10, prevBtn, nextBtn, countLabel);
-            VBox root = new VBox(12, top, bot);
+            Label findLbl    = new Label("Find:");
+            Label replaceLbl = new Label("Replace:");
+            findLbl.setPrefWidth(65);
+            replaceLbl.setPrefWidth(65);
+            HBox findRow    = new HBox(8, findLbl, searchField, regexBox);
+            HBox replaceRow = new HBox(8, replaceLbl, replaceField);
+            HBox btnRow     = new HBox(8, prevBtn, nextBtn, countLabel,
+                                       new Separator(Orientation.VERTICAL),
+                                       replaceBtn, replaceAllBtn);
+            VBox root = new VBox(10, findRow, replaceRow, btnRow);
             root.setPadding(new Insets(15));
             root.setStyle("-fx-background-color: white;");
 
             // Stage Setup
             searchStage = new Stage();
             searchStage.initStyle(StageStyle.UTILITY);
-            searchStage.setTitle("Find");
+            searchStage.setTitle("Find & Replace");
             searchStage.setAlwaysOnTop(true);
             searchStage.setResizable(false);
 
@@ -89,6 +105,8 @@ public class WordSearch {
 
             nextBtn.setOnAction(e -> nextMatch());
             prevBtn.setOnAction(e -> prevMatch());
+            replaceBtn.setOnAction(e -> replaceCurrentMatch());
+            replaceAllBtn.setOnAction(e -> replaceAllMatches());
             regexBox.setOnAction(e -> triggerSearch());
 
             searchField.setOnKeyPressed(e -> {
@@ -157,6 +175,56 @@ public class WordSearch {
 
     private void clearHighlight() {
         scriptExecute.accept("quill.formatText(0, quill.getLength(), 'background', false, 'silent');", true);
+    }
+
+    private void replaceCurrentMatch() {
+        String replacement = replaceField.getText();
+        int start, length;
+        synchronized (matchIndices) {
+            if (matchIndices.isEmpty()) return;
+            int[] range = matchIndices.get(currentIndex.get());
+            start  = range[0];
+            length = range[1] - range[0];
+        }
+        String script = String.format(
+            "quill.deleteText(%d, %d, 'user'); quill.insertText(%d, '%s', 'user');",
+            start, length, start, escapeForJs(replacement)
+        );
+        scriptExecute.accept(script, true);
+        // Re-run search so indices reflect the changed document
+        Platform.runLater(this::triggerSearch);
+    }
+
+    private void replaceAllMatches() {
+        String replacement = replaceField.getText();
+        synchronized (matchIndices) {
+            if (matchIndices.isEmpty()) return;
+            String escaped = escapeForJs(replacement);
+            // Build one script replacing in reverse order so earlier indices stay valid
+            StringBuilder sb = new StringBuilder();
+            for (int i = matchIndices.size() - 1; i >= 0; i--) {
+                int[] range = matchIndices.get(i);
+                sb.append(String.format(
+                    "quill.deleteText(%d, %d, 'user'); quill.insertText(%d, '%s', 'user');",
+                    range[0], range[1] - range[0], range[0], escaped
+                ));
+            }
+            scriptExecute.accept(sb.toString(), true);
+            matchIndices.clear();
+        }
+        Platform.runLater(() -> {
+            countLabel.setText("0/0");
+            triggerSearch();
+        });
+    }
+
+    private static String escapeForJs(String text) {
+        return text
+            .replace("\\", "\\\\")
+            .replace("'",  "\\'")
+            .replace("\n", "\\n")
+            .replace("\r", "\\r")
+            .replace("\t", "\\t");
     }
 
     private void startLiveSearchThread() {
