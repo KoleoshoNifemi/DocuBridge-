@@ -36,17 +36,16 @@ public class Editor {
     private double dpi;
     private VBox editorWrapper;
     private ClipboardHandler clipboardHandler;
+    private TranslationManager translationManager;
+    private String originalText = "";
 
-    // ── Search field ──────────────────────────────────────────────
     private WordSearch wordSearch;
-    // ── Collab fields ─────────────────────────────────────────────
     private CollabClient collabClient;
     private String serverHost;
     private String username;
     private boolean bridgeAttached = false;
-    private int lastSentCursorIndex  = -2; // -2 forces a send on first poll
+    private int lastSentCursorIndex  = -2;
     private int lastSentCursorLength = 0;
-    // ─────────────────────────────────────────────────────────────
 
     private double readDPI() {
         return Screen.getPrimary().getDpi();
@@ -72,14 +71,13 @@ public class Editor {
         pause.setOnFinished(event -> {
             Boolean quillReady = (Boolean) quill.executeScript("typeof quill !== 'undefined' && quill !== null");
             if (Boolean.TRUE.equals(quillReady)) {
+                System.out.println("✓ Quill is ready");
                 clipboardHandler = new ClipboardHandler(webView);
                 initializeShortcuts();
 
-                // Mark window as ready for bridge attachment
                 JSObject win = (JSObject) quill.executeScript("window");
                 win.setMember("collabBridgeReady", true);
 
-                // Start polling — attaches bridge as soon as collabClient connects
                 bridgeAttached = false;
                 scheduleAttachBridge();
 
@@ -90,24 +88,17 @@ public class Editor {
         pause.play();
     }
 
-    /**
-     * Polls every 200ms on the JavaFX thread until both:
-     *   1. window.collabBridge exists (editor.html script has run), AND
-     *   2. collabClient is connected
-     * Then attaches the Java client to the JS bridge.
-     */
     private void scheduleAttachBridge() {
-        if (bridgeAttached) return; // already done, stop polling
+        if (bridgeAttached) return;
 
         PauseTransition check = new PauseTransition(Duration.millis(200));
         check.setOnFinished(e -> {
             if (bridgeAttached) return;
 
             if (collabClient != null && collabClient.isOpen()) {
-                // Both sides ready — attach now
+                System.out.println("✓ collabClient is open, attaching bridge");
                 attachJsBridge();
             } else {
-                // Keep waiting
                 scheduleAttachBridge();
             }
         });
@@ -167,8 +158,11 @@ public class Editor {
     }
 
     public Editor(String name, Runnable saveAs, Runnable save, Runnable newFile, Runnable openFile,
-                  Runnable showCollabDialog, Runnable stopHosting, Runnable disconnectCollab) {
+                  Runnable showCollabDialog, Runnable stopHosting, Runnable disconnectCollab,
+                  TranslationManager translationManager) {
         this.name = name;
+        this.translationManager = translationManager;
+        System.out.println("DEBUG: Editor created with translationManager=" + (translationManager != null ? "yes" : "null"));
         dpi = readDPI();
         toolBar = new Toolbar(
                 giveFunctionsNoParams(saveAs, save, newFile, openFile, showCollabDialog, stopHosting, disconnectCollab),
@@ -180,8 +174,6 @@ public class Editor {
         initializeLayout();
     }
 
-    // ── Collab public API ─────────────────────────────────────────
-
     public void enableCollab(String serverHost, String username, Consumer<String[]> onUsersChanged) {
         this.serverHost = serverHost;
         this.username   = username;
@@ -190,14 +182,12 @@ public class Editor {
         collabClient = CollabClient.create(serverHost, username, name, quill);
         if (onUsersChanged != null) collabClient.setOnUsersChanged(onUsersChanged);
 
-        // Connect on background thread — scheduleAttachBridge() will pick it up when ready
         new Thread(() -> {
             try {
+                System.out.println("DEBUG: Connecting to collab server...");
                 boolean connected = collabClient.connectBlocking();
                 if (connected) {
                     System.out.println("✓ Collab connected to " + serverHost);
-                    // scheduleAttachBridge() running on JavaFX thread will detect the connection
-                    // and call attachJsBridge() automatically
                 } else {
                     System.err.println("✗ Could not connect to CollabServer at " + serverHost);
                 }
@@ -211,21 +201,20 @@ public class Editor {
         bridgeAttached = true;
         System.out.println("✓ JS collab bridge attached");
 
-        // Register listener from executeScript context (same context as quill.getContents works in)
         Object reg = quill.executeScript(
-            "(function(){" +
-            "  if (typeof quill === 'undefined') return 'quill_not_found';" +
-            "  quill.on('text-change', function(delta, oldDelta, source) {" +
-            "    document.title = 'TC:' + source + ':' + (window._tcFromJava = (window._tcFromJava||0)+1);" +
-            "    if (source !== 'user') return;" +
-            "    var el = document.getElementById('deltaComm');" +
-            "    if (!el) return;" +
-            "    var arr = JSON.parse(el.value || '[]');" +
-            "    arr.push(JSON.stringify(delta));" +
-            "    el.value = JSON.stringify(arr);" +
-            "  });" +
-            "  return 'listener_added';" +
-            "})()"
+                "(function(){" +
+                        "  if (typeof quill === 'undefined') return 'quill_not_found';" +
+                        "  quill.on('text-change', function(delta, oldDelta, source) {" +
+                        "    document.title = 'TC:' + source + ':' + (window._tcFromJava = (window._tcFromJava||0)+1);" +
+                        "    if (source !== 'user') return;" +
+                        "    var el = document.getElementById('deltaComm');" +
+                        "    if (!el) return;" +
+                        "    var arr = JSON.parse(el.value || '[]');" +
+                        "    arr.push(JSON.stringify(delta));" +
+                        "    el.value = JSON.stringify(arr);" +
+                        "  });" +
+                        "  return 'listener_added';" +
+                        "})()"
         );
         System.out.println("DEBUG attachJsBridge listener registration: " + reg);
         startDeltaPoller();
@@ -239,13 +228,11 @@ public class Editor {
         poll.setOnFinished(e -> {
             if (!bridgeAttached || collabClient == null) return;
             try {
-                // Read selection directly — no events, no textarea, no race conditions.
-                // Returns "index,length" or null if editor has no selection.
                 Object raw = quill.executeScript(
-                    "(function(){" +
-                    "  var s = quill.getSelection();" +
-                    "  return s ? s.index + ',' + s.length : null;" +
-                    "})()"
+                        "(function(){" +
+                                "  var s = quill.getSelection();" +
+                                "  return s ? s.index + ',' + s.length : null;" +
+                                "})()"
                 );
                 if (raw instanceof String) {
                     String[] parts = ((String) raw).split(",");
@@ -269,37 +256,83 @@ public class Editor {
 
     private void startDeltaPoller() {
         pollCounter = 0;
-        PauseTransition poll = new PauseTransition(Duration.millis(80));
+        System.out.println("DEBUG: startDeltaPoller started");
+        PauseTransition poll = new PauseTransition(Duration.millis(800));
         poll.setOnFinished(e -> {
-            if (!bridgeAttached || collabClient == null) return; // stopped
+            if (!bridgeAttached || collabClient == null) {
+                System.out.println("DEBUG: Delta poller skipped - bridgeAttached=" + bridgeAttached + ", collabClient=" + (collabClient != null));
+                return;
+            }
             try {
-                // Every ~4 seconds, print diagnostic regardless of content
                 if (pollCounter++ % 50 == 0) {
-                    Object rawVal  = quill.executeScript("var _el=document.getElementById('deltaComm'); _el ? _el.value : 'NOT_FOUND'");
-                    Object title   = quill.executeScript("document.title");
-                    Object tcJava  = quill.executeScript("window._tcFromJava || 0");
-                    Object content = quill.executeScript("quill.getText().length");
-                    System.out.println("DEBUG heartbeat #" + pollCounter + ": deltaComm=[" + rawVal + "], title=" + title + ", tcFromJava=" + tcJava + ", quillLen=" + content);
+                    System.out.println("DEBUG: Delta poller heartbeat #" + pollCounter);
                 }
                 String arrJson = (String) quill.executeScript(
-                    "(function(){ var el=document.getElementById('deltaComm'); if(!el) return '[]'; var v=el.value||'[]'; el.value='[]'; return v; })()"
+                        "(function(){ var el=document.getElementById('deltaComm'); if(!el) return '[]'; var v=el.value||'[]'; el.value='[]'; return v; })()"
                 );
+
                 if (arrJson != null && !arrJson.equals("[]")) {
-                    System.out.println("DEBUG poller: found deltas: " + arrJson);
+                    System.out.println("DEBUG: ✓ Found deltas: " + arrJson.substring(0, Math.min(100, arrJson.length())));
                     JSONArray arr = new JSONArray(arrJson);
                     for (int i = 0; i < arr.length(); i++) {
                         collabClient.sendDelta(arr.getString(i));
                     }
+
+                    // Get current text
+                    String currentText = (String) quill.executeScript("quill.getText()");
+                    originalText = currentText;
+                    System.out.println("DEBUG: Stored original text: " + currentText);
+
+                    // Check translation
+                    if (translationManager != null) {
+                        System.out.println("DEBUG: translationManager is NOT null");
+                        boolean isEnabled = translationManager.isTranslationEnabled();
+                        System.out.println("DEBUG: Translation enabled? " + isEnabled);
+
+                        if (isEnabled) {
+                            System.out.println("DEBUG: Translation IS enabled, target language: " + translationManager.getTargetLanguage());
+                            System.out.println("DEBUG: Translating from original: " + originalText);
+                            translationManager.translatePlainText(originalText, translatedText -> {
+                                System.out.println("DEBUG: Translation callback received with: " + translatedText);
+                                Platform.runLater(() -> {
+                                    System.out.println("DEBUG: Updating editor UI with translated text");
+                                    Object selection = quill.executeScript("quill.getSelection()");
+                                    JSObject selObj = (JSObject) selection;
+                                    int cursorPos = 0;
+                                    if (selObj != null) {
+                                        Object indexObj = selObj.getMember("index");
+                                        if (indexObj instanceof Number) {
+                                            cursorPos = ((Number) indexObj).intValue();
+                                        }
+                                    }
+
+                                    String escaped = escapeForJavaScript(translatedText);
+                                    System.out.println("DEBUG: Setting text to: " + escaped);
+                                    quill.executeScript(
+                                            "quill.setText('" + escaped + "');" +
+                                                    "quill.setSelection(" + Math.min(cursorPos, translatedText.length()) + ", 0);"
+                                    );
+                                    System.out.println("DEBUG: Text updated successfully");
+                                });
+                            });
+                        } else {
+                            System.out.println("DEBUG: Translation NOT enabled");
+                        }
+                    } else {
+                        System.out.println("DEBUG: ✗ translationManager is NULL!");
+                    }
                 }
             } catch (Exception ex) {
                 System.err.println("Delta poller error: " + ex.getMessage());
+                ex.printStackTrace();
             }
-            if (bridgeAttached && collabClient != null) poll.play(); // reschedule
+            if (bridgeAttached && collabClient != null) poll.play();
         });
         poll.play();
     }
 
     public void disconnectCollab() {
+        System.out.println("DEBUG: disconnectCollab called");
         bridgeAttached = false;
         lastSentCursorIndex  = -2;
         lastSentCursorLength = 0;
@@ -323,8 +356,6 @@ public class Editor {
     public Toolbar getToolbar() {
         return toolBar;
     }
-
-    // ─────────────────────────────────────────────────────────────
 
     private void undo() {
         Platform.runLater(() -> quill.executeScript("quill.history.cutoff(); quill.history.undo();"));
@@ -506,6 +537,57 @@ public class Editor {
 
     private void search(String text) {}
 
+    private void toggleTranslation(String langCode, String action) {
+        System.out.println("DEBUG: toggleTranslation called - langCode=" + langCode + ", action=" + action);
+        if (translationManager == null) {
+            System.out.println("DEBUG: ✗ translationManager is null!");
+            return;
+        }
+        if ("disable".equals(action)) {
+            System.out.println("DEBUG: Disabling translation");
+            translationManager.disableTranslation();
+        } else if ("enable".equals(action)) {
+            System.out.println("DEBUG: Enabling translation for " + langCode);
+            translationManager.enableTranslation(langCode);
+        }
+    }
+
+    private void retranslate(String langCode, String source) {
+        System.out.println("DEBUG: retranslate called - langCode=" + langCode);
+        if (translationManager == null) {
+            System.out.println("DEBUG: ✗ translationManager is null!");
+            return;
+        }
+        if (originalText.isEmpty()) {
+            System.out.println("DEBUG: ✗ originalText is empty!");
+            return;
+        }
+
+        System.out.println("DEBUG: Re-translating from original: " + originalText);
+        translationManager.translatePlainText(originalText, translatedText -> {
+            System.out.println("DEBUG: Retranslate callback received: " + translatedText);
+            Platform.runLater(() -> {
+                String escaped = escapeForJavaScript(translatedText);
+                quill.executeScript(
+                        "quill.setText('" + escaped + "');" +
+                                "quill.setSelection(0, 0);"
+                );
+                System.out.println("DEBUG: Re-translation complete");
+            });
+        });
+    }
+
+    private String escapeForJavaScript(String text) {
+        if (text == null) return "";
+        return text
+                .replace("\\", "\\\\")
+                .replace("'", "\\'")
+                .replace("\"", "\\\"")
+                .replace("\n", "\\n")
+                .replace("\r", "\\r")
+                .replace("\t", "\\t");
+    }
+
     private void initializeShortcuts() {
         webView.addEventFilter(KeyEvent.KEY_PRESSED, event -> {
             if (event.isControlDown() || event.isMetaDown()) {
@@ -553,6 +635,8 @@ public class Editor {
         temp.put("setHeader",        this::setHeader);
         temp.put("insertList",       this::insertList);
         temp.put("insertImage",      this::insertImage);
+        temp.put("toggleTranslation", this::toggleTranslation);
+        temp.put("retranslate",      this::retranslate);
         return temp;
     }
 
@@ -583,9 +667,9 @@ public class Editor {
     private void showSearch() {
         if (wordSearch == null) {
             wordSearch = new WordSearch(
-                this::quillExecute,
-                () -> { Object t = quill.executeScript("window.getCachedDocumentText()"); return t != null ? t.toString() : ""; },
-                webView
+                    this::quillExecute,
+                    () -> { Object t = quill.executeScript("window.getCachedDocumentText()"); return t != null ? t.toString() : ""; },
+                    webView
             );
         }
         wordSearch.showSearchPopup();

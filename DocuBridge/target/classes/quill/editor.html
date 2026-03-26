@@ -1,0 +1,411 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>Quill Editor</title>
+    <script>
+        // Disable native scroll commands that can force jump-to-caret in WebView/WebKit
+        Element.prototype.scrollIntoView = function() {};
+        Element.prototype.scrollIntoViewIfNeeded = function() {};
+        window.scrollTo = function() {};
+        window.scroll = function() {};
+        window.scrollBy = function() {};
+    </script>
+    <script>
+        window.api = window.api || {};
+        window.api.highlight = window.api.highlight || function() {};
+        window.api.clearHighlight = window.api.clearHighlight || function() {};
+    </script>
+    <script src="quill.js"></script>
+    <script src="image-tools.js"></script>
+
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            /* Gray workspace background */
+            background: #e0e0e0;
+        }
+
+        #editor-container {
+            height: 750px;
+            /* Matches body to hide the 18px gap */
+            background: #f1f3f4;
+            /* Reserve space for the WebView scrollbar so it doesn't cover content */
+            padding-right: 18px;
+            box-sizing: border-box;
+        }
+
+        .ql-editor {
+            /* The 'Paper' styling */
+            background: white;
+            font-family: 'Arial', 'Courier New', 'Georgia', 'Times New Roman';
+            font-size: 16px;
+            padding: 50px !important;
+            min-height: 750px;
+            outline: none;
+            line-height: 1.5;
+            box-sizing: border-box;
+            scrollbar-gutter: stable;
+
+            /* Center the document */
+            margin: 0 auto;
+            max-width: 850px;
+
+            /* Page shadow effect */
+            box-shadow: 0 0 10px rgba(0,0,0,0.1);
+        }
+
+        .ql-editor p {
+            margin: 0 0 8px 0;
+            box-sizing: border-box;
+        }
+
+        .ql-editor span[style*="background-color"] {
+            padding: 2px 4px;
+            box-sizing: border-box;
+            display: inline;
+            vertical-align: baseline;
+        }
+
+        .ql-editor span[style*="font-size"] {
+            line-height: 1.5;
+        }
+
+        .ql-editor ol {
+            list-style-type: none;
+            padding-left: 2em;
+            margin: 0.5em 0;
+            counter-reset: list-counter;
+        }
+
+        .ql-editor ol li[data-list="bullet"] {
+            list-style-type: none;
+            counter-increment: none;
+        }
+
+        .ql-editor ol li[data-list="bullet"]::before {
+            content: "•";
+            margin-right: 0.5em;
+            margin-left: -1.5em;
+        }
+
+        .ql-editor ol li:not([data-list]) {
+            counter-increment: list-counter;
+        }
+
+        .ql-editor ol li:not([data-list])::before {
+            content: counter(list-counter) ". ";
+            margin-right: 0.5em;
+            margin-left: -1.5em;
+        }
+
+        .ql-editor ol li[data-list="ordered"]::before {
+            content: counter(list-counter) ". ";
+            margin-right: 0.5em;
+            margin-left: -1.5em;
+            counter-increment: list-counter;
+        }
+
+        .ql-editor li {
+            margin: 0.25em 0;
+        }
+
+        /* Basic image styling for inline-block floats so text wraps beside */
+        .ql-editor img,
+        .ql-editor .ql-image {
+            max-width: 100%;
+            height: auto;
+            display: inline-block;
+            vertical-align: top;
+            float: left;
+            margin: 0 12px 0 0;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+
+        .ql-editor:not(:focus) ::selection {
+            background: transparent;
+        }
+
+        .ql-container.ql-snow {
+            border: none !important;
+        }
+
+        /* ── Remote cursor overlays ─────────────────────────────── */
+        .remote-cursor-caret {
+            position: absolute;
+            width: 2px;
+            pointer-events: none;
+            z-index: 1000;
+        }
+        .remote-cursor-label {
+            position: absolute;
+            padding: 2px 6px;
+            border-radius: 3px;
+            font-size: 11px;
+            font-family: Arial, sans-serif;
+            white-space: nowrap;
+            color: white;
+            pointer-events: none;
+            z-index: 1000;
+            line-height: 1.4;
+            font-weight: 500;
+            opacity: 0.88;
+        }
+        /* ──────────────────────────────────────────────────────── */
+    </style>
+</head>
+<body>
+<div id="editor-container"></div>
+<textarea id="deltaComm" style="display:none"></textarea>
+<textarea id="incomingComm" style="display:none"></textarea>
+<textarea id="cursorComm" style="display:none"></textarea>
+
+<script>
+    var quill = new Quill('#editor-container', {
+        theme: 'snow',
+        modules: {
+            toolbar: false,
+            history: {
+                delay: 1,
+                maxStack: 1000,
+                userOnly: true
+            }
+        },
+        placeholder: null
+    });
+
+    window.quillEditor = quill;
+
+    // --- CACHING ADDITIONS ---
+    window.cachedDocumentText = quill.getText();
+    quill.on('text-change', function() {
+        window.cachedDocumentText = quill.getText();
+    });
+
+    window.getCachedDocumentText = function() {
+        return window.cachedDocumentText;
+    };
+    // -------------------------
+
+    var Size = Quill.import('attributors/style/size');
+    Size.whitelist = [
+        '8px', '9px', '10px', '11px', '12px', '13px', '14px', '15px', '16px',
+        '17px', '18px', '19px', '20px', '21px', '22px', '23px', '24px', '25px',
+        '26px', '27px', '28px', '29px', '30px', '31px', '32px', '33px', '34px',
+        '35px', '36px', '37px', '38px', '39px', '40px', '41px', '42px', '43px',
+        '44px', '45px', '46px', '47px', '48px', '49px', '50px', '51px', '52px',
+        '53px', '54px', '55px', '56px', '57px', '58px', '59px', '60px', '61px',
+        '62px', '63px', '64px', '65px', '66px', '67px', '68px', '69px', '70px',
+        '71px', '72px', '73px', '74px', '75px', '76px', '77px', '78px', '79px',
+        '80px', '81px', '82px', '83px', '84px', '85px', '86px', '87px', '88px',
+        '89px', '90px', '91px', '92px'
+    ];
+    Quill.register(Size, true);
+
+    var Font = Quill.import('attributors/style/font');
+    Font.whitelist = ['Arial', 'Courier New', 'Georgia', 'Times New Roman'];
+    Quill.register(Font, true);
+
+    var Align = Quill.import('attributors/style/align');
+    Align.whitelist = ['left', 'center', 'right', 'justify'];
+    Quill.register(Align, true);
+
+    var Header = Quill.import('formats/header');
+    Quill.register(Header, true);
+
+    var Color = Quill.import('attributors/style/color');
+    Quill.register(Color, true);
+
+    var Background = Quill.import('attributors/style/background');
+    Quill.register(Background, true);
+
+    var List = Quill.import('formats/list');
+    var ListItem = Quill.import('formats/list-item');
+    Quill.register(List, true);
+    Quill.register(ListItem, true);
+
+    window.getEditorContentForWord = function() {
+        const delta = quill.getContents();
+        return JSON.stringify(delta);
+    };
+
+    window.getEditorText = function() {
+        return quill.getText();
+    };
+
+    window.getEditorHTML = function() {
+        return quill.root.innerHTML;
+    };
+
+    window.setEditorContent = function(content, isHTML) {
+        if (isHTML) {
+            quill.root.innerHTML = content;
+            quill.update();
+        } else {
+            quill.setContents(JSON.parse(content));
+        }
+        window.cachedDocumentText = quill.getText(); // Sync cache on load
+    };
+
+    window.clearEditor = function() {
+        quill.setContents([]);
+        window.cachedDocumentText = ""; // Clear cache
+    };
+
+    window.hasChanges = function() {
+        return quill.getLength() > 1;
+    };
+
+    window.getBounds = function(index) {
+        return quill.getBounds(index);
+    };
+
+    // ── Remote cursor overlay ────────────────────────────────────
+    (function() {
+        var container = document.getElementById('editor-container');
+        container.style.position = 'relative';
+
+        var cursorLayer = document.createElement('div');
+        cursorLayer.id = 'cursor-layer';
+        cursorLayer.style.cssText = 'position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:none;overflow:visible;z-index:500;';
+        container.appendChild(cursorLayer);
+
+        // Deterministic color palette — visually distinct, good contrast on white
+        var palette = [
+            '#e74c3c','#3498db','#2ecc71','#9b59b6','#f39c12',
+            '#1abc9c','#e67e22','#c0392b','#2980b9','#27ae60',
+            '#8e44ad','#d35400','#16a085','#2471a3','#cb4335'
+        ];
+        var userColorMap = {};
+        function colorFor(username) {
+            if (!userColorMap[username]) {
+                var h = 0;
+                for (var i = 0; i < username.length; i++) {
+                    h = (h << 5) - h + username.charCodeAt(i);
+                    h |= 0;
+                }
+                userColorMap[username] = palette[Math.abs(h) % palette.length];
+            }
+            return userColorMap[username];
+        }
+
+        var cursors = {};
+
+        window.updateRemoteCursor = function(username, index) {
+            if (index < 0) { window.removeRemoteCursor(username); return; }
+            // Clamp to valid range so getBounds never throws
+            var safeIndex = Math.min(index, Math.max(0, quill.getLength() - 1));
+            var color = colorFor(username);
+            if (!cursors[username]) {
+                var caret = document.createElement('div');
+                caret.className = 'remote-cursor-caret';
+                caret.style.background = color;
+                var label = document.createElement('div');
+                label.className = 'remote-cursor-label';
+                label.textContent = username;
+                label.style.background = color;
+                cursorLayer.appendChild(caret);
+                cursorLayer.appendChild(label);
+                cursors[username] = { caret: caret, label: label };
+            }
+            try {
+                var b = quill.getBounds(safeIndex);
+                var c = cursors[username];
+                c.caret.style.left   = b.left + 'px';
+                c.caret.style.top    = b.top + 'px';
+                c.caret.style.height = b.height + 'px';
+                var labelTop = b.top > 22 ? b.top - 22 : b.top + b.height + 2;
+                c.label.style.left = b.left + 'px';
+                c.label.style.top  = labelTop + 'px';
+            } catch(e) {}
+        };
+
+        window.removeRemoteCursor = function(username) {
+            if (cursors[username]) {
+                cursors[username].caret.remove();
+                cursors[username].label.remove();
+                delete cursors[username];
+                delete userColorMap[username];
+            }
+        };
+
+        window.clearAllRemoteCursors = function() {
+            Object.keys(cursors).forEach(function(u) { window.removeRemoteCursor(u); });
+        };
+    })();
+    // ────────────────────────────────────────────────────────────
+
+    quill.root.addEventListener('keydown', function(e) {
+        const selection = quill.getSelection();
+        if (!selection) {
+            return;
+        }
+
+        const index = selection.index;
+        const formats = quill.getFormat(index, 0);
+
+        if (e.key === 'Backspace' && selection.length === 0 && formats.list) {
+            if (index === 0) {
+                e.preventDefault();
+                quill.format('list', false);
+                quill.focus();
+                return;
+            }
+
+            let lineStart = 0;
+            for (let i = index - 1; i >= 0; i--) {
+                if (quill.getText(i, 1) === '\n') {
+                    lineStart = i + 1;
+                    break;
+                }
+            }
+
+            const lineText = quill.getText(lineStart, index - lineStart).trim();
+
+            if (lineText === '') {
+                e.preventDefault();
+                quill.format('list', false);
+                quill.focus();
+                return;
+            }
+        }
+    });
+
+    quill.root.addEventListener('blur', function() {
+        setTimeout(function() {
+            quill.focus();
+        }, 10);
+    });
+
+    setTimeout(function() {
+        quill.focus();
+    }, 200);
+
+    quill.on('text-change', function (delta, oldDelta, source) {
+        window._tcCount = (window._tcCount || 0) + 1;
+        window._lastSource = source;
+    });
+
+    // Poll for incoming deltas/full-content written by Java via the DOM
+    setInterval(function() {
+        var el = document.getElementById('incomingComm');
+        var v = el.value || '[]';
+        if (v === '[]') return;
+        el.value = '[]';
+        var msgs = JSON.parse(v);
+        for (var i = 0; i < msgs.length; i++) {
+            var msg = msgs[i];
+            try {
+                if (msg.op === 'delta') {
+                    quill.updateContents(JSON.parse(msg.data), 'api');
+                } else if (msg.op === 'full') {
+                    quill.setContents(JSON.parse(msg.data), 'api');
+                }
+            } catch (err) {}
+        }
+    }, 50);
+</script>
+</body>
+</html>

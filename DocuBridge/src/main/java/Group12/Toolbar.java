@@ -47,9 +47,8 @@ public class Toolbar {
     private String lastAppliedFontName;
     private String lastAppliedFontSize;
 
-    // ── Collab menu item references so we can update their labels dynamically ──
-    private MenuItem collabStatusItem;   // shows "● Connected" or "○ Offline"
-    private MenuItem stopHostingItem;    // enabled only when hosting
+    private MenuItem collabStatusItem;
+    private MenuItem stopHostingItem;
 
     private double readDPI() {
         return Screen.getPrimary().getDpi();
@@ -272,7 +271,7 @@ public class Toolbar {
                 createMenu("Edit",   new String[]{"Undo", "Redo", "Find"}),
                 createMenu("Insert", new String[]{"Image", "Link", "List"}),
                 createMenu("Format", new String[]{"Align Left", "Align Center", "Align Right", "Justify"}),
-                createCollabMenu()   // ← new Collab menu
+                createCollabMenu()
         );
 
         ToolBar formatToolbar = new ToolBar();
@@ -311,18 +310,14 @@ public class Toolbar {
         toolbarContainer = new VBox(menuBar, formatToolbar);
     }
 
-    // ── Collab Menu ───────────────────────────────────────────────────────────
-
     private Menu createCollabMenu() {
         Menu menu = new Menu("Collab");
 
-        // Status indicator — read-only, just shows current state
         collabStatusItem = new MenuItem("○ Offline");
-        collabStatusItem.setDisable(true);  // not clickable, just informational
+        collabStatusItem.setDisable(true);
 
         SeparatorMenuItem sep1 = new SeparatorMenuItem();
 
-        // Open the collab setup dialog (host / join / offline)
         MenuItem openCollabItem = new MenuItem("Session settings…");
         openCollabItem.setOnAction(e -> {
             Runnable fn = voidFunctions.get("showCollabDialog");
@@ -331,7 +326,6 @@ public class Toolbar {
 
         SeparatorMenuItem sep2 = new SeparatorMenuItem();
 
-        // Stop hosting — only enabled when this user is the host
         stopHostingItem = new MenuItem("Stop hosting");
         stopHostingItem.setDisable(true);
         stopHostingItem.setOnAction(e -> {
@@ -339,7 +333,6 @@ public class Toolbar {
             if (fn != null) fn.run();
         });
 
-        // Disconnect from a session (when joined as a client)
         MenuItem disconnectItem = new MenuItem("Disconnect");
         disconnectItem.setOnAction(e -> {
             Runnable fn = voidFunctions.get("disconnectCollab");
@@ -350,11 +343,6 @@ public class Toolbar {
         return menu;
     }
 
-    /**
-     * Called by Main.java to update the Collab menu status label and button states.
-     * @param status  One of: "offline", "hosting", "connected"
-     * @param details Extra info shown in the label (e.g. room code, or host IP)
-     */
     public void updateCollabStatus(String status, String details) {
         Platform.runLater(() -> {
             switch (status) {
@@ -373,8 +361,6 @@ public class Toolbar {
             }
         });
     }
-
-    // ─────────────────────────────────────────────────────────────────────────
 
     private Separator createSeparator() {
         return new Separator(Orientation.VERTICAL);
@@ -471,6 +457,13 @@ public class Toolbar {
                     if (fn != null) fn.accept("", "user");
                 });
                 menu.getItems().add(imageItem);
+            } else if (name.equals("Link")) {
+                MenuItem linkItem = new MenuItem("Link");
+                linkItem.setOnAction(event -> {
+                    Runnable fn = voidFunctions.get("applyLink");
+                    if (fn != null) fn.run();
+                });
+                menu.getItems().add(linkItem);
             } else {
                 menu.getItems().add(new MenuItem(name));
             }
@@ -585,13 +578,34 @@ public class Toolbar {
             MenuItem langItem = new MenuItem(language);
             langItem.setOnAction(event -> {
                 if (!language.equals("No Translation")) {
-                    BiConsumer<String, String> fn = formats.get("translate");
-                    if (fn != null) { /* translation logic */ }
+                    String langCode = getLanguageCode(language);
+                    BiConsumer<String, String> fn = formats.get("toggleTranslation");
+                    if (fn != null) {
+                        fn.accept(langCode, "enable");
+                        System.out.println("✓ Changed translation to: " + language + " (" + langCode + ")");
+                        // Trigger re-translation immediately
+                        BiConsumer<String, String> retranslate = formats.get("retranslate");
+                        if (retranslate != null) retranslate.accept(langCode, "user");
+                    }
+                } else {
+                    BiConsumer<String, String> fn = formats.get("toggleTranslation");
+                    if (fn != null) fn.accept(null, "disable");
                 }
             });
             translationMenu.getItems().add(langItem);
         }
         return translationMenu;
+    }
+
+    private String getLanguageCode(String language) {
+        switch (language) {
+            case "French": return "fr";
+            case "Spanish": return "es";
+            case "German": return "de";
+            case "Greek": return "el";
+            case "Portuguese": return "pt";
+            default: return "en";
+        }
     }
 
     private Button createStrikethroughButton() {

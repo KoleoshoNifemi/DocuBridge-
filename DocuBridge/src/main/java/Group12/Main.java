@@ -18,6 +18,7 @@ public class Main extends Application {
     private int currentUserId;
     private String currentUsername;
     private String currentFileName;
+    private TranslationManager translationManager;
 
     // ── Collab state ──────────────────────────────────────────────
     private String collabServerHost = null;
@@ -36,8 +37,14 @@ public class Main extends Application {
         }
         String connectionUrl = props.getProperty("db.url");
 
+        // Load Azure Translator credentials
+        String azureKey = props.getProperty("azure.translator.key");
+        String azureRegion = props.getProperty("azure.translator.region", "eastus");
+        String azureEndpoint = props.getProperty("azure.translator.endpoint", "https://api.cognitive.microsofttranslator.com");
+
         try {
             db = new DatabaseManager(connectionUrl);
+            translationManager = new TranslationManager(azureKey, azureRegion, azureEndpoint);
             authUI = new AuthenticationUI(db, this::onLoginSuccess);
             authUI.showAuthScreen(stage);
         } catch (Exception e) {
@@ -224,7 +231,8 @@ public class Main extends Application {
                     this::openFile,
                     this::showCollabSetupDialog,
                     this::stopHosting,
-                    this::disconnectFromCollab
+                    this::disconnectFromCollab,
+                    translationManager
             );
 
             if (content != null && !content.isEmpty()) editor.loadContent(content);
