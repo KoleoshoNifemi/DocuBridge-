@@ -609,7 +609,8 @@ public class Editor {
     }
 
     private void setTextHighlight(String colour, String source) {
-        Platform.runLater(() -> { webView.requestFocus(); quill.executeScript("quill.focus(); quill.format('background','" + colour + "','" + source + "');"); forceRepaint(); });
+        String val = (colour == null || colour.isEmpty()) ? "false" : "'" + colour + "'";
+        Platform.runLater(() -> { webView.requestFocus(); quill.executeScript("quill.focus(); quill.format('background'," + val + ",'" + source + "');"); forceRepaint(); });
     }
 
     private void setHeader(String level, String source) {

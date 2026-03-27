@@ -826,6 +826,17 @@ public class Toolbar {
                 }
             }
         }
+        MenuItem noHighlight = new MenuItem("✕  No Highlight");
+        noHighlight.setOnAction(e -> {
+            BiConsumer<String, String> format = formats.get("setHighlightColor");
+            if (format != null) format.accept("", "user");
+            highlightMenu.hide();
+        });
+        highlightMenu.getItems().add(noHighlight);
+
+        SeparatorMenuItem sep = new SeparatorMenuItem();
+        highlightMenu.getItems().add(sep);
+
         CustomMenuItem colorMenuItem = new CustomMenuItem(colorGrid);
         colorMenuItem.setHideOnClick(false);
         highlightMenu.getItems().add(colorMenuItem);
