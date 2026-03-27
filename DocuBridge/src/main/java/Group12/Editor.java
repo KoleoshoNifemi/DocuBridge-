@@ -46,7 +46,8 @@ public class Editor {
     private boolean bridgeAttached = false;
     private int lastSentCursorIndex  = -2;
     private int lastSentCursorLength = 0;
-    private int lastTranslationVersion = -1;
+    private String  lastTranslatedText  = null;  // plain text of the last content we translated
+    private boolean translating         = false;  // true while an async translation is in-flight
 
     private double readDPI() {
         return Screen.getPrimary().getDpi();
@@ -218,18 +219,20 @@ public class Editor {
                         "})()"
         );
         System.out.println("DEBUG attachJsBridge listener registration: " + reg);
-        lastTranslationVersion = -1;
+        lastTranslatedText = null;
+        translating        = false;
         startDeltaPoller();
         startCursorPoller();
         startTranslationPoller();
     }
 
     private void startTranslationPoller() {
-        // pendingVersion[0] tracks the last _translationVersion value we observed changing.
-        // lastChangeTime[0] is the wall-clock ms when that change was first seen.
-        // We only fire a translation once the version has been STABLE for ≥1 s (debounce).
-        final long[] lastChangeTime  = {0};
-        final int[]  pendingVersion  = {-1};
+        // stableText[0]   — the last text we saw; used to detect changes
+        // lastChangeTime  — wall-clock ms when stableText last changed
+        // Together they implement a 1 s debounce: we only translate once the
+        // document has been stable for a full second.
+        final String[] stableText    = {null};
+        final long[]   lastChangeMs  = {0};
 
         PauseTransition poll = new PauseTransition(Duration.millis(500));
         poll.setOnFinished(e -> {
@@ -239,36 +242,56 @@ public class Editor {
                 return;
             }
             try {
-                Object vObj = quill.executeScript("window._translationVersion || 0");
-                int v = vObj instanceof Number ? ((Number) vObj).intValue() : 0;
+                String currentText = (String) quill.executeScript("quill.getText()");
+                if (currentText == null) { if (bridgeAttached && collabClient != null) poll.play(); return; }
+
                 long now = System.currentTimeMillis();
 
-                if (v != pendingVersion[0]) {
-                    // Content just changed — start / reset the debounce timer
-                    pendingVersion[0]  = v;
-                    lastChangeTime[0]  = now;
-                } else if (v != lastTranslationVersion && (now - lastChangeTime[0]) >= 1000) {
-                    // Version has been stable for 1 s — translate
-                    lastTranslationVersion = v;
+                if (!currentText.equals(stableText[0])) {
+                    // Document changed — reset debounce timer
+                    stableText[0]   = currentText;
+                    lastChangeMs[0] = now;
+                } else if (!currentText.equals(lastTranslatedText)
+                        && (now - lastChangeMs[0]) >= 1000
+                        && !translating) {
+                    // Stable for ≥1 s, content differs from last translation, not busy — go
+                    translating = true;
+                    final String snapshot = currentText;
                     String deltaJson = (String) quill.executeScript("JSON.stringify(quill.getContents())");
                     if (deltaJson != null) {
                         translationManager.translateDeltaAsync(deltaJson, translatedDelta -> {
-                            // callback already runs on FX thread via Platform.runLater inside translateDeltaAsync
-                            JSObject win = (JSObject) quill.executeScript("window");
-                            win.setMember("_pendingTranslatedDelta", translatedDelta);
-                            quill.executeScript(
-                                "window._applyingTranslation = true;" +
-                                "try { quill.setContents(JSON.parse(window._pendingTranslatedDelta), 'api'); } catch(e){}" +
-                                "window._applyingTranslation = false;" +
-                                "window._pendingTranslatedDelta = null;"
-                            );
+                            // Stale-check: if doc changed while we were translating, discard
+                            String nowText = (String) quill.executeScript("quill.getText()");
+                            if (snapshot.equals(nowText)) {
+                                applyTranslatedDelta(translatedDelta);
+                                // Record the post-translation text so the poller doesn't immediately re-fire
+                                String afterText = (String) quill.executeScript("quill.getText()");
+                                lastTranslatedText = afterText != null ? afterText : snapshot;
+                            } else {
+                                lastTranslatedText = null; // force retry on next stable window
+                            }
+                            translating = false;
                         });
+                    } else {
+                        translating = false;
                     }
                 }
-            } catch (Exception ex) { /* ignore */ }
+            } catch (Exception ex) { translating = false; }
             if (bridgeAttached && collabClient != null) poll.play();
         });
         poll.play();
+    }
+
+    /** Applies a translated delta JSON to the Quill editor without triggering re-translation. */
+    private void applyTranslatedDelta(String translatedDelta) {
+        JSObject win = (JSObject) quill.executeScript("window");
+        win.setMember("_pendingTranslatedDelta", translatedDelta);
+        quill.executeScript(
+            "window._applyingTranslation = true;" +
+            "try { quill.setContents(JSON.parse(window._pendingTranslatedDelta), 'api'); } catch(e){}" +
+            "window._applyingTranslation = false;" +
+            "window._pendingTranslatedDelta = null;"
+        );
     }
 
     private void startCursorPoller() {
@@ -341,7 +364,8 @@ public class Editor {
         bridgeAttached = false;
         lastSentCursorIndex    = -2;
         lastSentCursorLength   = 0;
-        lastTranslationVersion = -1;
+        lastTranslatedText = null;
+        translating        = false;
         if (translationManager != null) translationManager.disableTranslation();
         try {
             quill.executeScript("if (typeof window.clearAllRemoteCursors === 'function') window.clearAllRemoteCursors();");
@@ -558,23 +582,19 @@ public class Editor {
     }
 
     private void retranslate(String langCode, String source) {
-        if (translationManager == null || !isCollabConnected()) return;
+        if (translationManager == null || !isCollabConnected() || translating) return;
 
         String deltaJson = (String) quill.executeScript("JSON.stringify(quill.getContents())");
         if (deltaJson == null) return;
 
-        lastTranslationVersion = -1; // force re-translate on next poller tick too
+        translating = true;
+        lastTranslatedText = null;
 
         translationManager.translateDeltaAsync(deltaJson, translatedDelta -> {
-            // callback already on FX thread
-            JSObject win = (JSObject) quill.executeScript("window");
-            win.setMember("_pendingTranslatedDelta", translatedDelta);
-            quill.executeScript(
-                "window._applyingTranslation = true;" +
-                "try { quill.setContents(JSON.parse(window._pendingTranslatedDelta), 'api'); } catch(e){}" +
-                "window._applyingTranslation = false;" +
-                "window._pendingTranslatedDelta = null;"
-            );
+            applyTranslatedDelta(translatedDelta);
+            String afterText = (String) quill.executeScript("quill.getText()");
+            lastTranslatedText = afterText; // poller won't re-fire unless content changes
+            translating = false;
         });
     }
 

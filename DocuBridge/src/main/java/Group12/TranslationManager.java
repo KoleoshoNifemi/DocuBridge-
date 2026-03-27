@@ -137,6 +137,19 @@ public class TranslationManager {
                     return;
                 }
 
+                // Sanitise: Azure occasionally inserts \n into a single translated run,
+                // which creates unwanted paragraph breaks when applied to Quill.
+                // Replace embedded newlines with a space and fall back to original text
+                // if the translation came back empty.
+                for (int i = 0; i < translated.size(); i++) {
+                    String t = translated.get(i);
+                    if (t == null || t.isEmpty()) {
+                        translated.set(i, textsToTranslate.get(i)); // keep original
+                    } else {
+                        translated.set(i, t.replace("\n", " ").replace("\r", ""));
+                    }
+                }
+
                 // Rebuild ops with translated text, all attributes unchanged
                 JSONArray newOps = new JSONArray();
                 int ptr = 0;
