@@ -46,8 +46,9 @@ public class Editor {
     private boolean bridgeAttached = false;
     private int lastSentCursorIndex  = -2;
     private int lastSentCursorLength = 0;
-    private int     lastTranslatedVersion = -1;   // _translationVersion at last completed translation
-    private boolean translating          = false; // true while an async translation is in-flight
+    private String  lastTranslatedText    = null;  // plain text of last translated content (live typing)
+    private int     lastTranslatedVersion = -1;   // _translationVersion at last translation (formatting)
+    private boolean translating           = false; // true while an async translation is in-flight
 
     private double readDPI() {
         return Screen.getPrimary().getDpi();
@@ -200,7 +201,8 @@ public class Editor {
     }
 
     private void attachJsBridge() {
-        bridgeAttached = true;
+        bridgeAttached        = true;
+        lastTranslatedText    = null;
         lastTranslatedVersion = -1;
         translating           = false;
         System.out.println("✓ JS collab bridge attached");
@@ -221,19 +223,18 @@ public class Editor {
                         "})()"
         );
         System.out.println("DEBUG attachJsBridge listener registration: " + reg);
-        lastTranslatedVersion = -1;
-        translating           = false;
         startDeltaPoller();
         startCursorPoller();
         startTranslationPoller();
     }
 
     private void startTranslationPoller() {
-        // Use _translationVersion (incremented by every text-change in editor.html, including
-        // formatting-only changes like header/align) instead of plain text so that formatting
-        // edits also trigger a retranslation.
-        final int[]  stableVersion = {-1};
-        final long[] lastChangeMs  = {0};
+        // Hybrid detection: plain-text comparison catches live typing reliably;
+        // _translationVersion catches formatting-only changes (header, align, list)
+        // that don't alter the plain text.
+        final String[] stableText    = {null};
+        final int[]    stableVersion = {-1};
+        final long[]   lastChangeMs  = {0};
 
         PauseTransition poll = new PauseTransition(Duration.millis(500));
         poll.setOnFinished(e -> {
@@ -243,36 +244,42 @@ public class Editor {
                 return;
             }
             try {
+                String currentText = (String) quill.executeScript("quill.getText()");
+                if (currentText == null) currentText = "";
                 Object verObj = quill.executeScript("window._translationVersion || 0");
                 int currentVersion = verObj instanceof Number ? ((Number) verObj).intValue() : 0;
                 long now = System.currentTimeMillis();
 
-                if (currentVersion != stableVersion[0]) {
+                boolean textChanged    = !currentText.equals(stableText[0]);
+                boolean versionChanged = currentVersion != stableVersion[0];
+
+                if (textChanged || versionChanged) {
                     // Something changed — reset debounce timer
+                    stableText[0]    = currentText;
                     stableVersion[0] = currentVersion;
                     lastChangeMs[0]  = now;
-                } else if (currentVersion != lastTranslatedVersion
-                        && (now - lastChangeMs[0]) >= 1000
-                        && !translating) {
-                    // Stable for ≥1 s, not yet translated at this version, not busy — go
-                    translating = true;
-                    final int snapVersion = currentVersion;
-                    syncParaFormatsToOriginal(); // copy header/align/list from display → _originalDelta
-                    String deltaJson = (String) quill.executeScript(
-                        "(function(){ return window._originalDelta || JSON.stringify(quill.getContents()); })()");
-                    if (deltaJson != null) {
-                        translationManager.translateDeltaAsync(deltaJson, translatedDelta -> {
-                            Object nowVerObj = quill.executeScript("window._translationVersion || 0");
-                            int nowVersion = nowVerObj instanceof Number ? ((Number) nowVerObj).intValue() : 0;
-                            if (snapVersion == nowVersion) {
+                } else {
+                    // Stable — check if we need to (re)translate
+                    boolean needsTranslation =
+                            !currentText.equals(lastTranslatedText) ||
+                            currentVersion != lastTranslatedVersion;
+                    if (needsTranslation && (now - lastChangeMs[0]) >= 1000 && !translating) {
+                        translating = true;
+                        final String snapText    = currentText;
+                        final int    snapVersion = currentVersion;
+                        syncParaFormatsToOriginal(); // copy header/align/list from display → _originalDelta
+                        String deltaJson = (String) quill.executeScript(
+                            "(function(){ return window._originalDelta || JSON.stringify(quill.getContents()); })()");
+                        if (deltaJson != null) {
+                            translationManager.translateDeltaAsync(deltaJson, translatedDelta -> {
                                 applyTranslatedDelta(translatedDelta);
+                                lastTranslatedText    = snapText;
                                 lastTranslatedVersion = snapVersion;
-                            }
-                            // if version changed during translation, poller will retry automatically
+                                translating = false;
+                            });
+                        } else {
                             translating = false;
-                        });
-                    } else {
-                        translating = false;
+                        }
                     }
                 }
             } catch (Exception ex) { translating = false; }
@@ -434,6 +441,7 @@ public class Editor {
         bridgeAttached        = false;
         lastSentCursorIndex   = -2;
         lastSentCursorLength  = 0;
+        lastTranslatedText    = null;
         lastTranslatedVersion = -1;
         translating           = false;
         if (translationManager != null) translationManager.disableTranslation();
@@ -680,6 +688,8 @@ public class Editor {
             applyTranslatedDelta(translatedDelta);
             Object verObj = quill.executeScript("window._translationVersion || 0");
             lastTranslatedVersion = verObj instanceof Number ? ((Number) verObj).intValue() : 0;
+            String afterText = (String) quill.executeScript("quill.getText()");
+            lastTranslatedText = afterText != null ? afterText : "";
             translating = false;
         });
     }
