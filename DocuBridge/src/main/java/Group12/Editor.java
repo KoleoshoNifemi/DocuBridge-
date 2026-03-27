@@ -354,6 +354,27 @@ public class Editor {
                     for (int i = 0; i < arr.length(); i++) {
                         collabClient.sendDelta(arr.getString(i));
                     }
+                    // While translation is ON, compose each user-typed delta into _originalDelta
+                    // so the poller retranslates up-to-date content instead of overwriting new typing.
+                    if (translationManager != null && translationManager.isTranslationEnabled()) {
+                        for (int i = 0; i < arr.length(); i++) {
+                            JSObject win = (JSObject) quill.executeScript("window");
+                            win.setMember("_userDeltaForCompose", arr.getString(i));
+                            quill.executeScript(
+                                "(function(){" +
+                                "  if (!window._originalDelta || !window._userDeltaForCompose) return;" +
+                                "  try {" +
+                                "    var Delta = Quill.import('delta');" +
+                                "    var orig = new Delta(JSON.parse(window._originalDelta));" +
+                                "    var d = new Delta(JSON.parse(window._userDeltaForCompose));" +
+                                "    window._originalDelta = JSON.stringify(orig.compose(d));" +
+                                "  } catch(e) {}" +
+                                "  window._userDeltaForCompose = null;" +
+                                "})()"
+                            );
+                        }
+                        lastTranslatedText = null; // force poller to retranslate with new content
+                    }
                 }
             } catch (Exception ex) {
                 System.err.println("Delta poller error: " + ex.getMessage());

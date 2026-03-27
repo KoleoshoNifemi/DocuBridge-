@@ -39,7 +39,9 @@ public class TranslationService {
             obj.put("Text", text);
             body.put(obj);
 
-            String url = endpoint + "/translate?api-version=3.0&from=" + sourceLanguage + "&to=" + targetLanguage;
+            String url = endpoint + "/translate?api-version=3.0"
+                    + (sourceLanguage != null && !sourceLanguage.isEmpty() ? "&from=" + sourceLanguage : "")
+                    + "&to=" + targetLanguage;
             System.out.println("DEBUG: URL=" + url);
 
             Request request = new Request.Builder()
@@ -86,7 +88,9 @@ public class TranslationService {
             JSONArray body = new JSONArray();
             for (String text : texts) body.put(new JSONObject().put("Text", text));
 
-            String url = endpoint + "/translate?api-version=3.0&from=" + from + "&to=" + to;
+            String url = endpoint + "/translate?api-version=3.0"
+                    + (from != null && !from.isEmpty() ? "&from=" + from : "")
+                    + "&to=" + to;
             Request request = new Request.Builder()
                     .url(url)
                     .post(RequestBody.create(body.toString(), MediaType.parse("application/json")))

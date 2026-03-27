@@ -10,7 +10,7 @@ import java.util.function.Consumer;
 public class TranslationManager {
     private TranslationService translationService;
     private String targetLanguage = null;
-    private String sourceLanguage = "en";
+    private String sourceLanguage = "";  // empty = auto-detect source language
 
     public TranslationManager(String subscriptionKey, String region, String endpoint) {
         System.out.println("DEBUG: TranslationManager initialized");
