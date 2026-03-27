@@ -202,7 +202,7 @@ public class Toolbar {
                     }
                 }
             } else {
-                alignmentCombo.setValue(null);
+                alignmentCombo.getSelectionModel().clearSelection();
             }
             alignmentCombo.setPromptText(displayAlign);
         }
