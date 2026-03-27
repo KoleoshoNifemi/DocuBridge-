@@ -257,7 +257,8 @@ public class Editor {
                     // Stable for ≥1 s, content differs from last translation, not busy — go
                     translating = true;
                     final String snapshot = currentText;
-                    String deltaJson = (String) quill.executeScript("JSON.stringify(quill.getContents())");
+                    String deltaJson = (String) quill.executeScript(
+                        "(function(){ return window._originalDelta || JSON.stringify(quill.getContents()); })()");
                     if (deltaJson != null) {
                         translationManager.translateDeltaAsync(deltaJson, translatedDelta -> {
                             // Stale-check: if doc changed while we were translating, discard
@@ -282,11 +283,15 @@ public class Editor {
         poll.play();
     }
 
-    /** Applies a translated delta JSON to the Quill editor without triggering re-translation. */
+    /** Applies a translated delta JSON to the Quill editor without triggering re-translation.
+     *  Also saves window._originalDelta (the pre-translation content) the first time it is called,
+     *  so future language switches always retranslate from the English base. */
     private void applyTranslatedDelta(String translatedDelta) {
         JSObject win = (JSObject) quill.executeScript("window");
         win.setMember("_pendingTranslatedDelta", translatedDelta);
         quill.executeScript(
+            // Capture the English original before we overwrite it — only on first call
+            "if (!window._originalDelta) window._originalDelta = JSON.stringify(quill.getContents());" +
             "window._applyingTranslation = true;" +
             "try { quill.setContents(JSON.parse(window._pendingTranslatedDelta), 'api'); } catch(e){}" +
             "window._applyingTranslation = false;" +
@@ -330,7 +335,7 @@ public class Editor {
     private void startDeltaPoller() {
         pollCounter = 0;
         System.out.println("DEBUG: startDeltaPoller started");
-        PauseTransition poll = new PauseTransition(Duration.millis(800));
+        PauseTransition poll = new PauseTransition(Duration.millis(150));
         poll.setOnFinished(e -> {
             if (!bridgeAttached || collabClient == null) {
                 System.out.println("DEBUG: Delta poller skipped - bridgeAttached=" + bridgeAttached + ", collabClient=" + (collabClient != null));
@@ -572,6 +577,19 @@ public class Editor {
         if (translationManager == null) return;
         if ("disable".equals(action)) {
             translationManager.disableTranslation();
+            lastTranslatedText = null;
+            // Restore the English original if we have it stored
+            try {
+                quill.executeScript(
+                    "(function(){" +
+                    "  if (!window._originalDelta) return;" +
+                    "  window._applyingTranslation = true;" +
+                    "  try { quill.setContents(JSON.parse(window._originalDelta), 'api'); } catch(e){}" +
+                    "  window._applyingTranslation = false;" +
+                    "  window._originalDelta = null;" +
+                    "})()"
+                );
+            } catch (Exception ignored) {}
         } else if ("enable".equals(action)) {
             if (!isCollabConnected()) {
                 System.out.println("Translation is only available during collaboration.");
@@ -584,7 +602,9 @@ public class Editor {
     private void retranslate(String langCode, String source) {
         if (translationManager == null || !isCollabConnected() || translating) return;
 
-        String deltaJson = (String) quill.executeScript("JSON.stringify(quill.getContents())");
+        // Always translate from the English original — never from an already-translated doc
+        String deltaJson = (String) quill.executeScript(
+            "(function(){ return window._originalDelta || JSON.stringify(quill.getContents()); })()");
         if (deltaJson == null) return;
 
         translating = true;
@@ -593,7 +613,7 @@ public class Editor {
         translationManager.translateDeltaAsync(deltaJson, translatedDelta -> {
             applyTranslatedDelta(translatedDelta);
             String afterText = (String) quill.executeScript("quill.getText()");
-            lastTranslatedText = afterText; // poller won't re-fire unless content changes
+            lastTranslatedText = afterText;
             translating = false;
         });
     }

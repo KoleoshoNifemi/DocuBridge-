@@ -49,6 +49,7 @@ public class Toolbar {
 
     private MenuItem collabStatusItem;
     private MenuItem stopHostingItem;
+    private MenuButton translationMenu;
 
     private double readDPI() {
         return Screen.getPrimary().getDpi();
@@ -571,7 +572,7 @@ public class Toolbar {
     }
 
     private MenuButton createTranslationMenu() {
-        MenuButton translationMenu = new MenuButton("Translation");
+        translationMenu = new MenuButton("Translation");
         translationMenu.setStyle("-fx-font-size: 14;");
         String[] languages = {"No Translation", "French", "German", "Greek", "Portuguese", "Spanish"};
         for (String language : languages) {
@@ -582,14 +583,17 @@ public class Toolbar {
                     BiConsumer<String, String> fn = formats.get("toggleTranslation");
                     if (fn != null) {
                         fn.accept(langCode, "enable");
+                        translationMenu.setText("\u21C4 " + language);
                         System.out.println("✓ Changed translation to: " + language + " (" + langCode + ")");
-                        // Trigger re-translation immediately
                         BiConsumer<String, String> retranslate = formats.get("retranslate");
                         if (retranslate != null) retranslate.accept(langCode, "user");
                     }
                 } else {
                     BiConsumer<String, String> fn = formats.get("toggleTranslation");
-                    if (fn != null) fn.accept(null, "disable");
+                    if (fn != null) {
+                        fn.accept(null, "disable");
+                        translationMenu.setText("Translation");
+                    }
                 }
             });
             translationMenu.getItems().add(langItem);

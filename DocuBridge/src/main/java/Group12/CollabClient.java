@@ -123,7 +123,15 @@ public class CollabClient extends WebSocketClient {
                         "(function(){" +
                                 "  if (!window._pendingDelta) return;" +
                                 "  try {" +
-                                "    quill.updateContents(JSON.parse(window._pendingDelta), 'api');" +
+                                "    var incoming = JSON.parse(window._pendingDelta);" +
+                                "    quill.updateContents(incoming, 'api');" +
+                                "    if (window._originalDelta) {" +
+                                "      try {" +
+                                "        var Delta = Quill.import('delta');" +
+                                "        var orig = new Delta(JSON.parse(window._originalDelta));" +
+                                "        window._originalDelta = JSON.stringify(orig.compose(new Delta(incoming)));" +
+                                "      } catch(ce) {}" +
+                                "    }" +
                                 "  } catch(e) {" +
                                 "    console.error('applyRemoteDelta failed: ' + e.message);" +
                                 "  }" +
@@ -148,6 +156,9 @@ public class CollabClient extends WebSocketClient {
                         "(function(){" +
                                 "  if (!window._pendingFullContent) return;" +
                                 "  try {" +
+                                "    if (window._originalDelta) {" +
+                                "      window._originalDelta = window._pendingFullContent;" +
+                                "    }" +
                                 "    quill.setContents(JSON.parse(window._pendingFullContent), 'api');" +
                                 "  } catch(e) {" +
                                 "    console.error('applyFullContent failed: ' + e.message);" +
