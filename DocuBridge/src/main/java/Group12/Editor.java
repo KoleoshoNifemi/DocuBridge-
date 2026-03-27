@@ -94,7 +94,7 @@ public class Editor {
         pause.setOnFinished(event -> {
             Boolean quillReady = (Boolean) quill.executeScript("typeof quill !== 'undefined' && quill !== null");
             if (Boolean.TRUE.equals(quillReady)) {
-                System.out.println("✓ Quill is ready");
+                //System.out.println("✓ Quill is ready");
                 clipboardHandler = new ClipboardHandler(webView);
                 initializeShortcuts();
 
@@ -122,7 +122,7 @@ public class Editor {
             if (bridgeAttached) return;
 
             if (collabClient != null && collabClient.isOpen()) {
-                System.out.println("✓ collabClient is open, attaching bridge");
+                //System.out.println("✓ collabClient is open, attaching bridge");
                 attachJsBridge();
             } else {
                 scheduleAttachBridge();
@@ -193,7 +193,7 @@ public class Editor {
                   TranslationManager translationManager) {
         this.name = name;
         this.translationManager = translationManager;
-        System.out.println("DEBUG: Editor created with translationManager=" + (translationManager != null ? "yes" : "null"));
+        //System.out.println("DEBUG: Editor created with translationManager=" + (translationManager != null ? "yes" : "null"));
         dpi = readDPI();
         //Toolbar gets its actions as lambdas grouped by signature - no direct reference back to Editor
         toolBar = new Toolbar(
@@ -217,10 +217,10 @@ public class Editor {
         //connectBlocking() is a blocking call so run it off the FX thread
         new Thread(() -> {
             try {
-                System.out.println("DEBUG: Connecting to collab server...");
+                //System.out.println("DEBUG: Connecting to collab server...");
                 boolean connected = collabClient.connectBlocking();
                 if (connected) {
-                    System.out.println("✓ Collab connected to " + serverHost);
+                    //System.out.println("✓ Collab connected to " + serverHost);
                 } else {
                     System.err.println("✗ Could not connect to CollabServer at " + serverHost);
                 }
@@ -237,7 +237,7 @@ public class Editor {
         lastTranslatedText    = null;
         lastTranslatedVersion = -1;
         translating           = false;
-        System.out.println("✓ JS collab bridge attached");
+        //System.out.println("✓ JS collab bridge attached");
 
         Object reg = quill.executeScript(
                 "(function(){" +
@@ -256,7 +256,7 @@ public class Editor {
                         "  return 'listener_added';" +
                         "})()"
         );
-        System.out.println("DEBUG attachJsBridge listener registration: " + reg);
+        //System.out.println("DEBUG attachJsBridge listener registration: " + reg);
         startDeltaPoller();
         startCursorPoller();
         startTranslationPoller();
@@ -427,16 +427,16 @@ public class Editor {
     //also compose deltas into _originalDelta so the translation poller sees fresh content
     private void startDeltaPoller() {
         pollCounter = 0;
-        System.out.println("DEBUG: startDeltaPoller started");
+        //System.out.println("DEBUG: startDeltaPoller started");
         PauseTransition poll = new PauseTransition(Duration.millis(150));
         poll.setOnFinished(e -> {
             if (!bridgeAttached || collabClient == null) {
-                System.out.println("DEBUG: Delta poller skipped - bridgeAttached=" + bridgeAttached + ", collabClient=" + (collabClient != null));
+                //System.out.println("DEBUG: Delta poller skipped - bridgeAttached=" + bridgeAttached + ", collabClient=" + (collabClient != null));
                 return;
             }
             try {
                 if (pollCounter++ % 50 == 0) {
-                    System.out.println("DEBUG: Delta poller heartbeat #" + pollCounter);
+                    //System.out.println("DEBUG: Delta poller heartbeat #" + pollCounter);
                 }
                 //read and atomically clear the queue in a single JS round-trip
                 String arrJson = (String) quill.executeScript(
@@ -481,7 +481,7 @@ public class Editor {
     }
 
     public void disconnectCollab() {
-        System.out.println("DEBUG: disconnectCollab called");
+        //System.out.println("DEBUG: disconnectCollab called");
         //stop all pollers by clearing bridgeAttached before closing the socket
         bridgeAttached        = false;
         lastSentCursorIndex   = -2;
@@ -747,7 +747,7 @@ public class Editor {
             } catch (Exception ignored) {}
         } else if ("enable".equals(action)) {
             if (!isCollabConnected()) {
-                System.out.println("Translation is only available during collaboration.");
+                //System.out.println("Translation is only available during collaboration.");
                 return;
             }
             translationManager.enableTranslation(langCode);

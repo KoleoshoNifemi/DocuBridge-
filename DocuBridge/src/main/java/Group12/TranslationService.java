@@ -16,10 +16,10 @@ public class TranslationService {
     private final OkHttpClient client;
 
     public TranslationService(String subscriptionKey, String region, String endpoint) {
-        System.out.println("DEBUG: TranslationService initialized");
-        System.out.println("DEBUG: Key present? " + (subscriptionKey != null && !subscriptionKey.isEmpty()));
-        System.out.println("DEBUG: Region: " + region);
-        System.out.println("DEBUG: Endpoint: " + endpoint);
+        //System.out.println("DEBUG: TranslationService initialized");
+        //System.out.println("DEBUG: Key present? " + (subscriptionKey != null && !subscriptionKey.isEmpty()));
+        //System.out.println("DEBUG: Region: " + region);
+        //System.out.println("DEBUG: Endpoint: " + endpoint);
         this.subscriptionKey = subscriptionKey;
         this.region = region;
         this.endpoint = endpoint;
@@ -28,12 +28,12 @@ public class TranslationService {
 
     //translates a single string; returns null on API error (caller decides what to do)
     public String translate(String text, String sourceLanguage, String targetLanguage) {
-        System.out.println("DEBUG: TranslationService.translate() called");
-        System.out.println("DEBUG: text: " + text);
-        System.out.println("DEBUG: from " + sourceLanguage + " to " + targetLanguage);
+        //System.out.println("DEBUG: TranslationService.translate() called");
+        //System.out.println("DEBUG: text: " + text);
+        //System.out.println("DEBUG: from " + sourceLanguage + " to " + targetLanguage);
 
         if (text == null || text.trim().isEmpty()) {
-            System.out.println("DEBUG: ✗ Text is empty, returning null");
+            //System.out.println("DEBUG: ✗ Text is empty, returning null");
             return text;
         }
 
@@ -48,7 +48,7 @@ public class TranslationService {
             String url = endpoint + "/translate?api-version=3.0"
                     + (sourceLanguage != null && !sourceLanguage.isEmpty() ? "&from=" + sourceLanguage : "")
                     + "&to=" + targetLanguage;
-            System.out.println("DEBUG: URL=" + url);
+            //System.out.println("DEBUG: URL=" + url);
 
             Request request = new Request.Builder()
                     .url(url)
@@ -59,13 +59,13 @@ public class TranslationService {
                     .addHeader("Content-Type", "application/json")
                     .build();
 
-            System.out.println("DEBUG: Making HTTP request...");
+            //System.out.println("DEBUG: Making HTTP request...");
             Response response = client.newCall(request).execute();
-            System.out.println("DEBUG: Response code: " + response.code());
+            //System.out.println("DEBUG: Response code: " + response.code());
 
             if (response.isSuccessful() && response.body() != null) {
                 String responseBody = response.body().string();
-                System.out.println("DEBUG: Response body: " + responseBody);
+                //System.out.println("DEBUG: Response body: " + responseBody);
                 //response is an array of results, one per input text; we only sent one so grab index 0
                 JSONArray jsonResponse = new JSONArray(responseBody);
                 String result = jsonResponse
@@ -73,7 +73,7 @@ public class TranslationService {
                         .getJSONArray("translations")
                         .getJSONObject(0)
                         .getString("text");
-                System.out.println("DEBUG: ✓ Translation successful: " + result);
+                //System.out.println("DEBUG: ✓ Translation successful: " + result);
                 return result;
             } else {
                 System.err.println("Translation API error: " + response.code());

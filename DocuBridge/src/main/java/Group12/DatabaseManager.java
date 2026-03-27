@@ -150,7 +150,7 @@ public class DatabaseManager {
             stmt.setInt(1, userId);
             stmt.setString(2, fileName);
             stmt.executeUpdate();
-            System.out.println("✓ File deleted from database: " + fileName);
+            //System.out.println("✓ File deleted from database: " + fileName);
         } catch (SQLException e) {
             System.err.println("Error deleting file: " + e.getMessage());
         }

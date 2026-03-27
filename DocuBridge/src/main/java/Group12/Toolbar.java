@@ -648,7 +648,7 @@ public class Toolbar {
                         fn.accept(langCode, "enable");
                         //⇄ arrow in the button label signals translation is active
                         translationMenu.setText("\u21C4 " + language);
-                        System.out.println("✓ Changed translation to: " + language + " (" + langCode + ")");
+                        //System.out.println("✓ Changed translation to: " + language + " (" + langCode + ")");
                         //immediately re-translate the current document content with the new target language
                         BiConsumer<String, String> retranslate = formats.get("retranslate");
                         if (retranslate != null) retranslate.accept(langCode, "user");

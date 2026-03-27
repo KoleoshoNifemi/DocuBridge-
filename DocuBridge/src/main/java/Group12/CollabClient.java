@@ -53,7 +53,7 @@ public class CollabClient extends WebSocketClient {
 
     @Override
     public void onOpen(ServerHandshake handshake) {
-        System.out.println("✓ Connected to CollabServer");
+        //System.out.println("✓ Connected to CollabServer");
         //immediately announce ourselves so the server puts us in a room
         JSONObject joinMsg = new JSONObject();
         joinMsg.put("type",     "join");
@@ -81,7 +81,7 @@ public class CollabClient extends WebSocketClient {
 
     @Override
     public void onClose(int code, String reason, boolean remote) {
-        System.out.println("CollabClient disconnected: " + reason);
+        //System.out.println("CollabClient disconnected: " + reason);
     }
 
     @Override
@@ -100,7 +100,7 @@ public class CollabClient extends WebSocketClient {
     }
 
     public void sendDelta(String deltaJson) {
-        System.out.println("DEBUG sendDelta: isOpen=" + isOpen());
+        //System.out.println("DEBUG sendDelta: isOpen=" + isOpen());
         //skip if we're currently applying a remote delta - otherwise we'd echo it back
         if (applyingRemote || !isOpen()) return;
         JSONObject msg = new JSONObject();
@@ -120,7 +120,7 @@ public class CollabClient extends WebSocketClient {
     }
 
     private void applyRemoteDelta(String deltaJson, String fromUser) {
-        System.out.println("DEBUG applyRemoteDelta called from " + fromUser);
+        //System.out.println("DEBUG applyRemoteDelta called from " + fromUser);
         //all Quill JS calls must happen on the JavaFX application thread
         Platform.runLater(() -> {
             try {
@@ -149,7 +149,7 @@ public class CollabClient extends WebSocketClient {
                                 "  window._pendingDelta = null;" +
                                 "})()"
                 );
-                System.out.println("DEBUG applyRemoteDelta: applied");
+                //System.out.println("DEBUG applyRemoteDelta: applied");
             } catch (Exception e) {
                 System.err.println("Failed to apply remote delta: " + e.getMessage());
             }
@@ -180,7 +180,7 @@ public class CollabClient extends WebSocketClient {
                                 "  quill.focus();" +
                                 "})()"
                 );
-                System.out.println("✓ Synced full document from server");
+                //System.out.println("✓ Synced full document from server");
             } catch (Exception e) {
                 System.err.println("Failed to apply full content: " + e.getMessage());
             }
@@ -212,7 +212,7 @@ public class CollabClient extends WebSocketClient {
     private void handleJoined(String serverFileName) {
         //server may redirect us to a different room than we asked for - keep our local fileName in sync
         if (!this.fileName.equals(serverFileName)) {
-            System.out.println("✓ Redirected to file: " + serverFileName);
+            //System.out.println("✓ Redirected to file: " + serverFileName);
             this.fileName = serverFileName;
             if (onFileNameChanged != null) {
                 Platform.runLater(() -> onFileNameChanged.accept(serverFileName));

@@ -57,7 +57,7 @@ public class Main extends Application {
     private void onLoginSuccess() {
         currentUserId   = authUI.getCurrentUserId();
         currentUsername = authUI.getCurrentUsername();
-        System.out.println("✓ Logged in as: " + currentUsername);
+        //System.out.println("✓ Logged in as: " + currentUsername);
         showFileSelector();
     }
 
@@ -266,7 +266,7 @@ public class Main extends Application {
                 saveFile();
                 disconnectFromCollab();
                 CollabServer.stopServer();
-                System.out.println("✓ File '" + (currentFileName != null ? currentFileName : "unsaved") + "' saved!");
+                //System.out.println("✓ File '" + (currentFileName != null ? currentFileName : "unsaved") + "' saved!");
                 System.exit(0);
             });
         } catch (Exception e) {
@@ -561,7 +561,7 @@ public class Main extends Application {
             //always store with .docx extension on disk
             String fileName = currentFileName.endsWith(".docx") ? currentFileName : currentFileName + ".docx";
             WordDocumentManager.createWordFile(fileName, content);
-            System.out.println("✓ Saved: " + fileName);
+            //System.out.println("✓ Saved: " + fileName);
         }
     }
 

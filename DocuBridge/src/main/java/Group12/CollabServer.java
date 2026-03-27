@@ -60,7 +60,7 @@ public class CollabServer extends WebSocketServer {
 
     @Override
     public void onOpen(WebSocket conn, ClientHandshake handshake) {
-        System.out.println("✓ New connection from: " + conn.getRemoteSocketAddress());
+        //System.out.println("✓ New connection from: " + conn.getRemoteSocketAddress());
     }
 
     @Override
@@ -88,7 +88,7 @@ public class CollabServer extends WebSocketServer {
         String fileName = requested;
         if (!documentRooms.containsKey(fileName) && !documentRooms.isEmpty()) {
             fileName = documentRooms.keySet().iterator().next();
-            System.out.println("  → Redirected " + username + " from '" + requested + "' to '" + fileName + "'");
+            //System.out.println("  → Redirected " + username + " from '" + requested + "' to '" + fileName + "'");
         }
 
         //register the connection in all three lookup maps
@@ -96,7 +96,7 @@ public class CollabServer extends WebSocketServer {
         connToFile.put(conn, fileName);
         documentRooms.computeIfAbsent(fileName, k -> Collections.synchronizedSet(new HashSet<>())).add(conn);
 
-        System.out.println("✓ " + username + " joined: " + fileName);
+        //System.out.println("✓ " + username + " joined: " + fileName);
 
         //tell the client which room they actually ended up in (may differ from what they requested)
         JSONObject ack = new JSONObject();
@@ -112,7 +112,7 @@ public class CollabServer extends WebSocketServer {
             syncMsg.put("content",  latestContent.get(fileName));
             syncMsg.put("username", "server");
             conn.send(syncMsg.toString());
-            System.out.println("  → Sent current doc state to " + username);
+            //System.out.println("  → Sent current doc state to " + username);
         }
 
         //update the user list shown to everyone in the room
@@ -124,7 +124,7 @@ public class CollabServer extends WebSocketServer {
         String user = usernames.getOrDefault(conn, "unknown");
         //stamp the sender's username onto the message before forwarding
         msg.put("username", user);
-        System.out.println("DEBUG server: delta from " + user);
+        //System.out.println("DEBUG server: delta from " + user);
 
         //forward the delta to everyone else in the room - not back to the sender
         Set<WebSocket> room = documentRooms.get(fileName);
@@ -133,7 +133,7 @@ public class CollabServer extends WebSocketServer {
                 for (WebSocket client : room) {
                     if (client != conn && client.isOpen()) {
                         client.send(msg.toString());
-                        System.out.println("DEBUG server: forwarded to " + usernames.getOrDefault(client, "?"));
+                        //System.out.println("DEBUG server: forwarded to " + usernames.getOrDefault(client, "?"));
                     }
                 }
             }
@@ -173,14 +173,14 @@ public class CollabServer extends WebSocketServer {
                 if (room.isEmpty()) {
                     //no one left - drop the room entirely so it doesn't linger
                     documentRooms.remove(fileName);
-                    System.out.println("Room closed (empty): " + fileName);
+                    //System.out.println("Room closed (empty): " + fileName);
                 } else {
                     //still people in the room - update their user list
                     broadcastUserList(fileName);
                 }
             }
         }
-        System.out.println("✗ Disconnected: " + (username != null ? username : "unknown"));
+        //System.out.println("✗ Disconnected: " + (username != null ? username : "unknown"));
     }
 
     @Override
@@ -190,10 +190,10 @@ public class CollabServer extends WebSocketServer {
 
     @Override
     public void onStart() {
-        System.out.println("╔══════════════════════════════════════╗");
-        System.out.println("║  DocuBridge CollabServer started     ║");
-        System.out.println("║  Listening on port " + PORT + "             ║");
-        System.out.println("╚══════════════════════════════════════╝");
+        //System.out.println("╔══════════════════════════════════════╗");
+        //System.out.println("║  DocuBridge CollabServer started     ║");
+        //System.out.println("║  Listening on port " + PORT + "             ║");
+        //System.out.println("╚══════════════════════════════════════╝");
     }
 
     private void broadcastUserList(String fileName) {
@@ -228,7 +228,7 @@ public class CollabServer extends WebSocketServer {
         try (java.net.DatagramSocket socket = new java.net.DatagramSocket()) {
             socket.connect(java.net.InetAddress.getByName("8.8.8.8"), 80);
             String ip = socket.getLocalAddress().getHostAddress();
-            System.out.println("✓ Host IP: " + ip);
+            //System.out.println("✓ Host IP: " + ip);
             return ip;
         } catch (Exception e) {
             System.err.println("Could not determine local IP, falling back to localhost");
@@ -261,7 +261,7 @@ public class CollabServer extends WebSocketServer {
         if (instance != null) return;
         instance = new CollabServer();
         instance.start();
-        System.out.println("CollabServer starting on port " + PORT + "...");
+        //System.out.println("CollabServer starting on port " + PORT + "...");
     }
 
     public static void stopServer() {
@@ -269,7 +269,7 @@ public class CollabServer extends WebSocketServer {
         try {
             //1000ms timeout gives in-flight messages a chance to finish
             instance.stop(1000);
-            System.out.println("✓ CollabServer stopped.");
+            //System.out.println("✓ CollabServer stopped.");
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
         } finally {
@@ -281,7 +281,7 @@ public class CollabServer extends WebSocketServer {
     public static void main(String[] args) throws InterruptedException {
         CollabServer server = new CollabServer();
         server.start();
-        System.out.println("Press Ctrl+C to stop.");
+        //System.out.println("Press Ctrl+C to stop.");
         //park the main thread so the server keeps running until killed
         Thread.currentThread().join();
     }
