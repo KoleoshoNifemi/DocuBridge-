@@ -221,8 +221,8 @@ public class Editor {
                         "})()"
         );
         System.out.println("DEBUG attachJsBridge listener registration: " + reg);
-        lastTranslatedText = null;
-        translating        = false;
+        lastTranslatedVersion = -1;
+        translating           = false;
         startDeltaPoller();
         startCursorPoller();
         startTranslationPoller();
@@ -642,7 +642,7 @@ public class Editor {
         if (translationManager == null) return;
         if ("disable".equals(action)) {
             translationManager.disableTranslation();
-            lastTranslatedText = null;
+            lastTranslatedVersion = -1;
             // Restore the English original if we have it stored
             try {
                 quill.executeScript(
