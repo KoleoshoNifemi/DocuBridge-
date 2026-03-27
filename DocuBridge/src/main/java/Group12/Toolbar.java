@@ -192,17 +192,14 @@ public class Toolbar {
         Object alignVal = formats.getMember("align");
         if (alignmentCombo != null) {
             String alignStr = getStringValue(alignVal, null);
-            String displayAlign = "Alignment";
-            if (alignStr != null && !alignStr.isEmpty()) {
-                displayAlign = alignStr.substring(0, 1).toUpperCase() + alignStr.substring(1);
-                for (String item : alignmentCombo.getItems()) {
-                    if (item.equalsIgnoreCase(displayAlign)) {
-                        alignmentCombo.setValue(item);
-                        break;
-                    }
+            String displayAlign = (alignStr != null && !alignStr.isEmpty())
+                ? alignStr.substring(0, 1).toUpperCase() + alignStr.substring(1)
+                : "Left";
+            for (String item : alignmentCombo.getItems()) {
+                if (item.equalsIgnoreCase(displayAlign)) {
+                    alignmentCombo.setValue(item);
+                    break;
                 }
-            } else {
-                alignmentCombo.getSelectionModel().clearSelection();
             }
             alignmentCombo.setPromptText(displayAlign);
         }
