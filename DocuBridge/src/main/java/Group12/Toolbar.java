@@ -574,11 +574,19 @@ public class Toolbar {
     private MenuButton createTranslationMenu() {
         translationMenu = new MenuButton("Translation");
         translationMenu.setStyle("-fx-font-size: 14;");
-        String[] languages = {"No Translation", "French", "German", "Greek", "Portuguese", "Spanish"};
+        // "No Translation" = turn off, restore original native language
+        // All other options are real translation targets
+        String[] languages = {"No Translation", "English", "French", "German", "Greek", "Portuguese", "Spanish"};
         for (String language : languages) {
             MenuItem langItem = new MenuItem(language);
             langItem.setOnAction(event -> {
-                if (!language.equals("No Translation")) {
+                if (language.equals("No Translation")) {
+                    BiConsumer<String, String> fn = formats.get("toggleTranslation");
+                    if (fn != null) {
+                        fn.accept(null, "disable");
+                        translationMenu.setText("Translation");
+                    }
+                } else {
                     String langCode = getLanguageCode(language);
                     BiConsumer<String, String> fn = formats.get("toggleTranslation");
                     if (fn != null) {
@@ -587,12 +595,6 @@ public class Toolbar {
                         System.out.println("✓ Changed translation to: " + language + " (" + langCode + ")");
                         BiConsumer<String, String> retranslate = formats.get("retranslate");
                         if (retranslate != null) retranslate.accept(langCode, "user");
-                    }
-                } else {
-                    BiConsumer<String, String> fn = formats.get("toggleTranslation");
-                    if (fn != null) {
-                        fn.accept(null, "disable");
-                        translationMenu.setText("Translation");
                     }
                 }
             });
@@ -603,12 +605,13 @@ public class Toolbar {
 
     private String getLanguageCode(String language) {
         switch (language) {
-            case "French": return "fr";
-            case "Spanish": return "es";
-            case "German": return "de";
-            case "Greek": return "el";
+            case "English":    return "en";
+            case "French":     return "fr";
+            case "Spanish":    return "es";
+            case "German":     return "de";
+            case "Greek":      return "el";
             case "Portuguese": return "pt";
-            default: return "en";
+            default:           return "en";
         }
     }
 

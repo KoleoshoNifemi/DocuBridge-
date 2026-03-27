@@ -776,7 +776,10 @@ public class Editor {
     }
 
     public String getContent() {
-        Object result = quill.executeScript("JSON.stringify(quill.getContents())");
+        // If translation is active, always save/send the original-language content,
+        // not the translated view — so reopening the file shows the author's language.
+        Object result = quill.executeScript(
+            "(function(){ return window._originalDelta || JSON.stringify(quill.getContents()); })()");
         return result != null ? result.toString() : "";
     }
 }
