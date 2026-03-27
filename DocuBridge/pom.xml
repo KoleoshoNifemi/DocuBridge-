@@ -10,8 +10,8 @@
     <version>1.0-SNAPSHOT</version>
 
     <properties>
-        <maven.compiler.source>25</maven.compiler.source>
-        <maven.compiler.target>25</maven.compiler.target>
+        <maven.compiler.source>22</maven.compiler.source>
+        <maven.compiler.target>22</maven.compiler.target>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <!-- Use latest JavaFX version compatible with JDK 25 -->
         <javafx.version>22.0.2</javafx.version> <!-- Latest stable version -->
@@ -123,13 +123,33 @@
                 <artifactId>maven-compiler-plugin</artifactId>
                 <version>3.11.0</version>
                 <configuration>
-                    <source>25</source>
-                    <target>25</target>
+                    <source>22</source>
+                    <target>22</target>
                     <compilerArgs>
                         <arg>--add-exports</arg>
                         <arg>javafx.graphics/com.sun.javafx.application=ALL-UNNAMED</arg>
                     </compilerArgs>
                 </configuration>
+            </plugin>
+
+            <!-- copies all non-JavaFX deps to target/package-input/ for jpackage -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-dependency-plugin</artifactId>
+                <version>3.6.0</version>
+                <executions>
+                    <execution>
+                        <id>copy-dependencies</id>
+                        <phase>package</phase>
+                        <goals>
+                            <goal>copy-dependencies</goal>
+                        </goals>
+                        <configuration>
+                            <outputDirectory>${project.build.directory}/package-input</outputDirectory>
+                            <excludeGroupIds>org.openjfx</excludeGroupIds>
+                        </configuration>
+                    </execution>
+                </executions>
             </plugin>
 
             <!-- JavaFX Maven Plugin -->
