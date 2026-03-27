@@ -15,6 +15,14 @@ public class DatabaseManager {
         return DriverManager.getConnection(connectionUrl);
     }
 
+    public boolean testConnection() {
+        try (Connection conn = getConnection()) {
+            return conn.isValid(2);
+        } catch (SQLException e) {
+            return false;
+        }
+    }
+
     public boolean registerUser(String username, String passwordHash) {
         try (Connection conn = getConnection();
              PreparedStatement stmt = conn.prepareStatement("INSERT INTO Users (username, password_hash) VALUES (?, ?)")) {

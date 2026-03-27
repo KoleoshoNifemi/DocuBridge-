@@ -80,6 +80,14 @@ public class AuthenticationUI {
             statusLabel.setStyle("-fx-text-fill: #e67e22;");
 
             new Thread(() -> {
+                if (!waitForServer(statusLabel, 15, 2000)) {
+                    Platform.runLater(() -> {
+                        loginBtn.setDisable(false);
+                        statusLabel.setText("Could not connect to server. Please try again.");
+                        statusLabel.setStyle("-fx-text-fill: red;");
+                    });
+                    return;
+                }
                 String hash = db.getPasswordHash(username);
                 Platform.runLater(() -> {
                     loginBtn.setDisable(false);
@@ -172,6 +180,14 @@ public class AuthenticationUI {
             statusLabel.setStyle("-fx-text-fill: #e67e22;");
 
             new Thread(() -> {
+                if (!waitForServer(statusLabel, 15, 2000)) {
+                    Platform.runLater(() -> {
+                        signupBtn.setDisable(false);
+                        statusLabel.setText("Could not connect to server. Please try again.");
+                        statusLabel.setStyle("-fx-text-fill: red;");
+                    });
+                    return;
+                }
                 String hash = BCrypt.hashpw(password, BCrypt.gensalt());
                 boolean success = db.registerUser(username, hash);
                 Platform.runLater(() -> {
@@ -212,5 +228,21 @@ public class AuthenticationUI {
 
     public String getCurrentUsername() {
         return currentUsername;
+    }
+
+    private boolean waitForServer(Label statusLabel, int maxRetries, int delayMs) {
+        for (int i = 1; i <= maxRetries; i++) {
+            if (db.testConnection()) return true;
+            final int attempt = i;
+            Platform.runLater(() -> statusLabel.setText(
+                "Waiting for server... (" + attempt + "/" + maxRetries + ")"));
+            try {
+                Thread.sleep(delayMs);
+            } catch (InterruptedException ex) {
+                Thread.currentThread().interrupt();
+                return false;
+            }
+        }
+        return false;
     }
 }
