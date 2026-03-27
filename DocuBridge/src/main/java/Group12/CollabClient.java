@@ -20,7 +20,7 @@ import java.util.function.Consumer;
  *
  * Same-WiFi: enter room code e.g. BRIDGE-4821
  * Different WiFi: host runs  ngrok tcp 8765  and shares the address
- *                 e.g. 0.tcp.ngrok.io:12345 — teammates paste that into Join field.
+ *                 e.g. 0.tcp.ngrok.io:12345 - teammates paste that into Join field.
  */
 public class CollabClient extends WebSocketClient {
 
@@ -148,7 +148,7 @@ public class CollabClient extends WebSocketClient {
     private void applyFullContent(String contentJson) {
         Platform.runLater(() -> {
             try {
-                // Use JSObject.setMember to pass content directly — avoids JS string
+                // Use JSObject.setMember to pass content directly - avoids JS string
                 // escaping issues that silently break JSON.parse on certain characters.
                 JSObject win = (JSObject) quillEngine.executeScript("window");
                 win.setMember("_pendingFullContent", contentJson);
@@ -178,7 +178,7 @@ public class CollabClient extends WebSocketClient {
         Platform.runLater(() -> {
             try {
                 // Pass username via setMember (handles special chars), but embed
-                // the index as a literal number in the JS string — if passed via
+                // the index as a literal number in the JS string - if passed via
                 // setMember, JavaFX wraps it as a Java Integer object, making
                 // typeof index === "object" instead of "number", which causes
                 // Quill's getBounds to take the wrong branch and return null.

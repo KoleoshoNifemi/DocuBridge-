@@ -78,7 +78,7 @@ public class CollabServer extends WebSocketServer {
         String username  = msg.getString("username");
 
         // If the requested room doesn't exist but another room is active, redirect the
-        // joiner there automatically — they don't need to have the same file name.
+        // joiner there automatically - they don't need to have the same file name.
         String fileName = requested;
         if (!documentRooms.containsKey(fileName) && !documentRooms.isEmpty()) {
             fileName = documentRooms.keySet().iterator().next();
@@ -204,7 +204,7 @@ public class CollabServer extends WebSocketServer {
 
     public static String generateRoomCode() {
         // DatagramSocket trick: ask the OS which local IP it would use to reach an
-        // external address. No data is actually sent — it just picks the right interface.
+        // external address. No data is actually sent - it just picks the right interface.
         try (java.net.DatagramSocket socket = new java.net.DatagramSocket()) {
             socket.connect(java.net.InetAddress.getByName("8.8.8.8"), 80);
             String ip = socket.getLocalAddress().getHostAddress();

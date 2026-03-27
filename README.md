@@ -1,6 +1,6 @@
 # DocuBridge
 
-A full-featured, collaborative desktop word processor built with JavaFX and Quill.js — featuring real-time multi-user editing over WebSocket, live document translation powered by Azure Translator, cloud-backed file storage on Azure SQL Server, and rich `.docx` export via Apache POI.
+A full-featured, collaborative desktop word processor built with JavaFX and Quill.js - featuring real-time multi-user editing over WebSocket, live document translation via Azure Translator, cloud-backed file storage on Azure SQL Server, and rich `.docx` export via Apache POI.
 
 Created by Tharunkaarthik Gopinath, Abdulrehman Nasir, Shehryar Usman, and Koleosho Nifemi.
 
@@ -9,72 +9,91 @@ Created by Tharunkaarthik Gopinath, Abdulrehman Nasir, Shehryar Usman, and Koleo
 ## Features
 
 ### Rich Text Editing
-- Embedded Quill.js editor inside a JavaFX `WebView`, delivering a browser-quality editing experience inside a native desktop app
-- Full formatting support: **bold**, *italic*, underline, strikethrough, sub/superscript
-- Font family selector (Arial, Courier New, Georgia, Times New Roman) and font size picker (8–92px)
-- Text and background color pickers
-- Paragraph alignment (left, center, right, justify)
-- Headers (H1–H3), ordered and unordered lists with nested indentation
-- Inline image insertion with drag-to-resize handles
-- Hyperlink insertion and auto-linking (URLs are detected and linked on Space/Enter)
-- Undo/redo with a 1000-step history stack
+- Embedded Quill.js editor inside a JavaFX `WebView` - browser-quality editing in a native desktop app
+- **Character formatting:** bold, italic, underline, strikethrough, subscript, superscript
+- **Font family:** Arial, Courier New, Georgia, Times New Roman
+- **Font size:** 8–92px (dropdown with common presets or manual entry)
+- **Text color:** 15-color palette with live color bar preview
+- **Highlight/background color:** 14-color palette with "No Highlight" option to clear
+- **Paragraph alignment:** Left, Center, Right, Justify
+- **Headers:** H1–H6 with "No Header" option
+- **Lists:** bulleted and numbered, with Backspace-to-exit on empty list item
+- **Images:** insert via file chooser (JPG, PNG, GIF, BMP, WebP), embedded as base64 data URIs, auto-scaled to max 500px wide, text-wrapping float
+- **Hyperlinks:** insert/edit via Ctrl+K or Insert menu, auto-link detection on Space/Enter, opens in system browser
+- **Undo/redo:** 1000-step history stack (user actions only)
 
 ### Keyboard Shortcuts
+
 | Shortcut | Action |
 |---|---|
 | Ctrl+B / I / U | Bold / Italic / Underline |
-| Ctrl+K | Insert / edit hyperlink |
-| Ctrl+Z / Y | Undo / Redo |
-| Ctrl+Shift+Z | Redo |
-| Ctrl+F | Find & Replace |
+| Ctrl+K | Insert or remove hyperlink |
+| Ctrl+Z | Undo |
+| Ctrl+Y / Ctrl+Shift+Z | Redo |
 | Ctrl+C / X / V | Copy / Cut / Paste |
-| Ctrl+= / Ctrl+- | Increase / Decrease font size |
+| Ctrl+F | Find & Replace |
+| Ctrl+Shift+= | Increase font size |
+| Ctrl+Shift+- | Decrease font size |
 | Ctrl+Backspace | Delete word before cursor |
 | Ctrl+Delete | Delete word after cursor |
-| Shift+Enter | Insert soft line break |
-
-### Real-Time Collaboration
-- Built-in WebSocket server (`CollabServer`) hosted by the session owner on port 8765
-- Clients connect via `CollabClient` using a room code (local IP) or an ngrok tunnel for cross-network sessions
-- Delta-based synchronization using Quill's operational transform protocol — only diffs are sent over the wire, not full document state
-- Live user presence list broadcast to all connected peers
-- Live remote cursor display — see each collaborator's cursor position labeled with their username in a distinct colour
-- Automatic room redirect: joining clients are routed to the active file if only one room is running
-- 80ms delta polling loop for near-real-time responsiveness
-
-### Live Document Translation
-- Powered by **Azure Translator** (Cognitive Services), translating document content in real time as you type
-- Supports English, French, Spanish, German, Greek, and Portuguese
-- Translation preserves all rich formatting — bold, italic, color, font size, headers, and lists are kept intact across language switches
-- "No Translation" option restores the original source text at any time
-- Operates on Quill's delta format directly, translating only text runs while leaving paragraph structure (newlines, attributes) untouched
-- **Works best in a collaboration session** (host or join a room) for fully live re-translation as you type; available in solo mode via the Translation toolbar menu
-
-### Cloud Authentication & File Storage
-- Azure SQL Server backend storing user accounts and document contents
-- Secure password storage using **BCrypt** hashing (jbcrypt)
-- User registration and login with validation (3-char min username, 6-char min password)
-- Automatic server connection retry on login/signup — if the database is still starting up, the app waits and retries rather than showing a false error
-- Per-user file management: create, open, save, delete documents stored in the cloud
-- Auto-save every 5 seconds while the editor is open
-
-### Word Document Export
-- Export any document to `.docx` format using **Apache POI**, preserving rich formatting (bold, italic, underline, color, font, size, alignment)
-- Parses Quill delta JSON and maps formatting attributes to POI `XWPFRun` / `XWPFParagraph` properties
-- Import `.docx` files back into the editor as plain text
-- Files saved to `~/Documents/DocuBridge/` locally
+| Shift+Enter | Soft line break (within paragraph) |
 
 ### Find & Replace
-- Ctrl+F opens a floating Find dialog with live match highlighting (yellow) directly in the editor
-- Regex pattern support
-- Next/Previous navigation with a match counter (e.g., `3 / 15`)
+- Ctrl+F opens a floating panel (always on top, non-blocking)
+- Live match highlighting in yellow as you type (400ms debounce)
+- Optional regex mode toggle
+- Match counter (e.g. `3 / 15`) with Prev/Next navigation
+- Replace single match or Replace All
 - Background-threaded search to keep the UI responsive
-- Escape to dismiss; Enter to jump to next match
+- Escape to close, Enter to jump to next match
 
-### Clipboard Bridge
-- Custom `ClipboardHandler` bridges the system clipboard with Quill's internal clipboard via `JSObject`
-- Ctrl+C/X/V work correctly across the JavaFX–WebView boundary
-- Preserves rich text (HTML) on copy, pastes HTML or plain text as appropriate
+### Real-Time Collaboration
+- Built-in WebSocket server (`CollabServer`) on port 8765, hosted by the session owner
+- **Same network:** share your local IP as the room code
+- **Cross-network:** set up an [ngrok](https://ngrok.com) TCP tunnel and share the ngrok address (in-app setup guide included)
+- Delta-based sync using Quill's operational transform format - only diffs sent over the wire
+- Full document sync sent to new joiners on connect
+- 150ms outgoing delta polling, 50ms incoming apply loop
+- **Live remote cursors:** each collaborator's cursor shown as a colored caret labeled with their username, 15-color deterministic palette
+- Real-time user presence list in the title bar and Collab menu
+- Automatic room redirect: joining a non-existent room routes to the active session
+
+### Live Translation
+- Powered by **Azure Translator** (Cognitive Services)
+- Supported languages: English, French, Spanish, German, Greek, Portuguese
+- Translates the entire document in real time as you type - debounced at 1 second of idle
+- Formatting fully preserved across languages: bold, italic, color, size, headers, lists, alignment are untouched
+- **Delta-aware:** translates only text runs; paragraph structure (newlines, attributes) is extracted before sending to Azure and stitched back in after
+- **Source preservation:** the original-language content is always saved internally so switching languages always retranslates from the source, never from an already-translated version
+- "No Translation" option restores the original text instantly
+- Menu button displays `⇄ Language` when active
+- Works best in a collaboration session (host or join) for continuous live updates
+- Toolbar hint warns when not in a collab session
+
+### Cloud Authentication & File Storage
+- Azure SQL Server backend for user accounts and document storage
+- Passwords hashed with **BCrypt** (jbcrypt) - plaintext never stored
+- Login and sign-up validation: 3-char minimum username, 6-char minimum password
+- Server retry on login/signup: if the database is still starting up, the app retries up to 15 times (2s apart) with a live countdown - no false "wrong password" errors
+- Per-user file isolation: each user only sees their own documents
+- Create, open, save, and delete files from the in-app file browser
+- Auto-save every 5 seconds while a file is open
+
+### Word Document Export & Import
+- Export to `.docx` via **Apache POI**, preserving all rich formatting:
+  - Bold, italic, underline, strikethrough
+  - Font family, size, color, and highlight
+  - Subscript and superscript
+  - Paragraph alignment and headers
+  - Bulleted and numbered lists
+  - Embedded images (auto-scaled to max 500px)
+- Import `.docx` files back as plain text
+- Exported files saved to `~/Documents/DocuBridge/`
+
+### Clipboard
+- Custom `ClipboardHandler` bridges the system clipboard with Quill across the JavaFX–WebView boundary
+- Copy/cut preserves rich HTML formatting
+- Paste detects HTML vs plain text and uses the appropriate Quill API
 
 ---
 
@@ -83,9 +102,9 @@ Created by Tharunkaarthik Gopinath, Abdulrehman Nasir, Shehryar Usman, and Koleo
 ```
 Main ──► AuthenticationUI ──► DatabaseManager (Azure SQL)
   │
-  └──► Editor ──► Toolbar              (receives callbacks via HashMap<String, Runnable>)
+  └──► Editor ──► Toolbar              (callbacks via HashMap<String, Runnable/BiConsumer>)
             │──► WebView/WebEngine ──► editor.html ──► quill.js
-            │──► ClipboardHandler      (JavaFX clipboard ↔ Quill JS via JSObject)
+            │──► ClipboardHandler      (JavaFX clipboard ↔ Quill JS)
             │──► WordSearch            (Find & Replace dialog)
             │──► TranslationManager ──► TranslationService (Azure Translator API)
             └──► CollabClient          (WebSocket client)
@@ -94,22 +113,29 @@ Main ──► AuthenticationUI ──► DatabaseManager (Azure SQL)
 ```
 
 ### Java ↔ JavaScript Bridge
-All formatting commands follow a direct execution pattern:
+Java calls into Quill directly:
 ```java
 webEngine.executeScript("quill.format('bold', true)");
 ```
-Collaboration deltas are passed back to Java via a hidden `<textarea id="deltaComm">` polled every 80ms — a lightweight, reliable IPC mechanism that avoids the complexity of JavaFX `JSObject` callbacks.
+Outgoing user deltas are collected in a hidden `<textarea id="deltaComm">` polled every 150ms. Incoming collab deltas are written to `<textarea id="incomingComm">` and applied by a JS `setInterval` every 50ms. This polling-based IPC avoids the fragility of JSObject callbacks across the WebView boundary.
 
-### Collaboration Protocol (JSON over WebSocket)
-| Message Type | Direction | Payload |
+### Collaboration Protocol
+
+| Message | Direction | Key Fields |
 |---|---|---|
-| `join` | Client → Server | `{ fileName, username }` |
-| `delta` | Bidirectional | `{ fileName, delta: QuillDelta }` |
-| `full` | Server → Client | `{ fileName, content: QuillDelta }` |
-| `userlist` | Server → Client | `{ users: string[] }` |
+| `join` | Client → Server | `fileName`, `username` |
+| `joined` | Server → Client | `fileName` |
+| `delta` | Bidirectional | `fileName`, `delta` (Quill delta JSON) |
+| `full` | Server → Client | `fileName`, `content` (full delta) |
+| `userlist` | Server → Client | `users` (string array) |
+| `cursor` | Bidirectional | `fileName`, `username`, `index`, `length` |
 
-### Translation Architecture
-Translation operates on Quill's delta JSON format rather than plain text, so formatting is preserved across language switches. The `TranslationManager` extracts text runs from delta ops, batches them into a single Azure Translator API call, then rebuilds the delta with translated text and original attributes. Embedded newlines are split out before translation and stitched back in afterward to prevent paragraph structure from being lost.
+### Translation Pipeline
+1. Translation poller fires after 1s of no changes
+2. `syncParaFormatsToOriginal()` copies current paragraph attributes (header, align, list) into `_originalDelta`
+3. `translateDeltaAsync()` extracts text runs from delta ops, splits each on `\n`, batches all segments in one Azure API call
+4. Translated segments are stitched back into the delta with `\n` characters and original formatting attributes restored
+5. `applyTranslatedDelta()` applies the result via `quill.setContents()`, restoring cursor position afterward
 
 ---
 
@@ -126,7 +152,8 @@ Translation operates on Quill's delta JSON format rather than plain text, so for
 | Password security | jBCrypt 0.4 |
 | Document export | Apache POI 5.2.3 |
 | Translation | Azure Translator (Cognitive Services) |
-| JSON handling | org.json |
+| HTTP client | OkHttp3 |
+| JSON | org.json |
 
 ---
 
@@ -135,6 +162,16 @@ Translation operates on Quill's delta JSON format rather than plain text, so for
 ### Prerequisites
 - Java 25+
 - Maven 3.8+
+- A `config.properties` file in `DocuBridge/` (not committed - see below)
+
+### Configuration
+Create `DocuBridge/config.properties`:
+```properties
+db.url=jdbc:sqlserver://<host>:1433;database=<db>;user=<user>;password=<pass>;encrypt=true;...
+azure.translator.key=<your-key>
+azure.translator.region=<your-region>
+azure.translator.endpoint=https://api.cognitive.microsofttranslator.com/
+```
 
 ### Run
 ```bash
@@ -144,19 +181,20 @@ mvn javafx:run
 ```
 
 ### Hosting a Collaboration Session
-1. Open or create a file and click **Collaborate → Host Session**
-2. Share the generated room code (your local IP) with collaborators on the same network
-3. For cross-network sessions, set up [ngrok](https://ngrok.com) and share the tunnel address
+1. Open or create a file, then go to **Collab → Session settings** and select **Host**
+2. The room code dialog shows your local IP for same-network collaborators
+3. For cross-network: follow the in-app ngrok setup guide to get a tunnel address
+4. Share the address with your collaborators
 
 ### Joining a Collaboration Session
-1. On the file selector screen, click **Join Session**
-2. Enter the room code or ngrok address provided by the host
+1. On the file selector, select **Join a Session** and enter the room code or ngrok address
+2. Or open a file first, then go to **Collab → Session settings** and select **Join**
 
 ### Using Live Translation
-1. Host or join a collaboration session for the best experience
-2. Open the **Translation** menu in the toolbar and select a target language
-3. The document will be translated in real time as you and your collaborators type
-4. Select **No Translation** to restore the original text at any time
+1. Host or join a collaboration session
+2. Open the **Translation** menu in the toolbar and pick a target language
+3. The document translates in real time as you type
+4. Select **No Translation** to restore the original text
 
 ---
 
@@ -164,22 +202,23 @@ mvn javafx:run
 
 ```
 DocuBridge/
+├── config.properties               # Local config - NOT committed (add to .gitignore)
 ├── src/main/java/Group12/
-│   ├── Main.java                # App entry point, window & collab orchestration
-│   ├── Editor.java              # WebView controller, Quill bridge, delta sync, translation poller
-│   ├── Toolbar.java             # MenuBar & formatting toolbar
-│   ├── ClipboardHandler.java    # JavaFX ↔ Quill clipboard bridge
-│   ├── AuthenticationUI.java    # Login & registration UI with server retry logic
-│   ├── DatabaseManager.java     # Azure SQL CRUD operations
-│   ├── CollabClient.java        # WebSocket collaboration client
-│   ├── CollabServer.java        # WebSocket collaboration server
-│   ├── TranslationManager.java  # Azure Translator integration, delta-aware translation
-│   ├── TranslationService.java  # Azure Translator HTTP client
-│   ├── WordDocumentManager.java # Apache POI .docx export/import
-│   └── WordSearch.java          # Find & Replace dialog
+│   ├── Main.java                   # App entry point, scene management, auto-save
+│   ├── Editor.java                 # WebView controller, Quill bridge, shortcuts, translation poller
+│   ├── Toolbar.java                # MenuBar, formatting toolbar, UI state refresh
+│   ├── ClipboardHandler.java       # JavaFX ↔ Quill clipboard bridge
+│   ├── AuthenticationUI.java       # Login & sign-up UI with server retry logic
+│   ├── DatabaseManager.java        # Azure SQL CRUD: users, files, content
+│   ├── CollabClient.java           # WebSocket client, delta/cursor send
+│   ├── CollabServer.java           # WebSocket server, room management, broadcast
+│   ├── TranslationManager.java     # Translation orchestration, delta-aware batching
+│   ├── TranslationService.java     # Azure Translator HTTP client (single + batch)
+│   ├── WordDocumentManager.java    # Apache POI .docx export and plain-text import
+│   └── WordSearch.java             # Find & Replace dialog, regex, match navigation
 └── src/main/resources/quill/
-    ├── editor.html              # Quill bootstrap & IPC layer
-    ├── quill.js                 # Bundled Quill.js library
-    ├── quill.snow.css           # Snow theme stylesheet
-    └── image-tools.js           # Image resize overlay
+    ├── editor.html                 # Quill init, IPC layer, remote cursors, auto-link
+    ├── quill.js                    # Bundled Quill.js v1.x
+    ├── quill.snow.css              # Snow theme styles
+    └── image-tools.js              # Image resize overlay
 ```

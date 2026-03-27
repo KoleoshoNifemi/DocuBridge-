@@ -140,7 +140,7 @@ public class WordDocumentManager {
             run.setFontFamily(getFontName(font));
 
         // ── Subscript / Superscript ────────────────────────────────────────
-        // Must use raw CTRPr — XWPFRun has no public sub/super API
+        // Must use raw CTRPr - XWPFRun has no public sub/super API
         String script = attrs.optString("script", null);
         if ("sub".equals(script) || "super".equals(script)) {
             CTRPr rPr = run.getCTR().isSetRPr() ? run.getCTR().getRPr() : run.getCTR().addNewRPr();

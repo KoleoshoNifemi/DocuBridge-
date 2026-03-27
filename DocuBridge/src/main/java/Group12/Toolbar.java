@@ -345,7 +345,7 @@ public class Toolbar {
         Platform.runLater(() -> {
             switch (status) {
                 case "hosting" -> {
-                    collabStatusItem.setText("● Hosting  —  code: " + details);
+                    collabStatusItem.setText("● Hosting  -  code: " + details);
                     stopHostingItem.setDisable(false);
                 }
                 case "connected" -> {
@@ -571,7 +571,7 @@ public class Toolbar {
     private MenuButton createTranslationMenu() {
         translationMenu = new MenuButton("Translation");
         translationMenu.setStyle("-fx-font-size: 14;");
-        translationMenu.setTooltip(new Tooltip("Live translation updates as you type — works best in a collaboration session"));
+        translationMenu.setTooltip(new Tooltip("Live translation updates as you type - works best in a collaboration session"));
 
         MenuItem hint = new MenuItem("⚠  Join a collab session for live translation");
         hint.setStyle("-fx-text-fill: grey; -fx-font-size: 11;");

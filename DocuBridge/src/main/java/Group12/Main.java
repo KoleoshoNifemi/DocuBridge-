@@ -329,7 +329,7 @@ public class Main extends Application {
 
             } else if (joinBtn.isSelected()) {
                 String code = codeField.getText().trim();
-                // Don't uppercase — localhost.run hostnames are case sensitive
+                // Don't uppercase - localhost.run hostnames are case sensitive
                 if (!code.isEmpty()) {
                     String host = CollabServer.resolveHostFromCode(code.toUpperCase());
                     // If resolveHostFromCode didn't find a registered code, treat the
@@ -373,18 +373,18 @@ public class Main extends Application {
         alert.setTitle("Session Started");
         alert.setHeaderText("Share with your teammates:");
 
-        Label sameWifiHeader = new Label("👥  Same network (hotspot/LAN) — your IP:");
+        Label sameWifiHeader = new Label("👥  Same network (hotspot/LAN) - your IP:");
         sameWifiHeader.setStyle("-fx-font-weight: bold;");
         Label codeLabel = new Label(roomCode);
         codeLabel.setStyle("-fx-font-size: 22px; -fx-font-weight: bold; -fx-font-family: monospace; -fx-padding: 2 0 8 0;");
 
-        Label diffWifiHeader = new Label("🌐  Different WiFi — ngrok:");
+        Label diffWifiHeader = new Label("🌐  Different WiFi - ngrok:");
         diffWifiHeader.setStyle("-fx-font-weight: bold; -fx-padding: 6 0 0 0;");
-        Label step1 = new Label("Step 1 — Open a terminal and run:");
+        Label step1 = new Label("Step 1 - Open a terminal and run:");
         Label ngrokCmd = new Label("    ngrok tcp 8765");
         ngrokCmd.setStyle("-fx-font-family: monospace; -fx-background-color: #f0f0f0; -fx-padding: 6; -fx-font-size: 12px;");
-        Label step2 = new Label("Step 2 — Copy the address it shows e.g.  0.tcp.ngrok.io:12345");
-        Label step3 = new Label("Step 3 — Send that address to teammates. They paste it into the Join field.");
+        Label step2 = new Label("Step 2 - Copy the address it shows e.g.  0.tcp.ngrok.io:12345");
+        Label step3 = new Label("Step 3 - Send that address to teammates. They paste it into the Join field.");
         step2.setWrapText(true);
         step3.setWrapText(true);
         Label keepOpen = new Label("⚠ Keep the terminal open while your session is active.");
@@ -423,19 +423,19 @@ public class Main extends Application {
         intro.setStyle("-fx-text-fill: #555;");
 
         // Step 1
-        Label s1 = new Label("Step 1 — Create a free account");
+        Label s1 = new Label("Step 1 - Create a free account");
         s1.setStyle("-fx-font-weight: bold;");
         Label s1detail = new Label("Go to https://ngrok.com and sign up for a free account.");
         s1detail.setWrapText(true);
 
         // Step 2
-        Label s2 = new Label("Step 2 — Download and install ngrok");
+        Label s2 = new Label("Step 2 - Download and install ngrok");
         s2.setStyle("-fx-font-weight: bold;");
         Label s2detail = new Label("After signing in, go to the Setup & Installation page. Download the version for your OS and follow the install instructions.");
         s2detail.setWrapText(true);
 
         // Step 3
-        Label s3 = new Label("Step 3 — Connect your account");
+        Label s3 = new Label("Step 3 - Connect your account");
         s3.setStyle("-fx-font-weight: bold;");
         Label s3detail = new Label("On the ngrok dashboard, copy your authtoken. Then run this once in a terminal:");
         s3detail.setWrapText(true);
@@ -443,7 +443,7 @@ public class Main extends Application {
         authtokenCmd.setStyle("-fx-font-family: monospace; -fx-background-color: #f0f0f0; -fx-padding: 6; -fx-font-size: 12px;");
 
         // Step 4
-        Label s4 = new Label("Step 4 — Every time you host");
+        Label s4 = new Label("Step 4 - Every time you host");
         s4.setStyle("-fx-font-weight: bold;");
         Label s4detail = new Label("Open a terminal and run:");
         Label ngrokCmd = new Label("    ngrok tcp 8765");

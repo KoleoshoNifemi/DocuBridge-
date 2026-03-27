@@ -265,12 +265,12 @@ public class Editor {
                 boolean versionChanged = currentVersion != stableVersion[0];
 
                 if (textChanged || versionChanged) {
-                    // Something changed — reset debounce timer
+                    // Something changed - reset debounce timer
                     stableText[0]    = currentText;
                     stableVersion[0] = currentVersion;
                     lastChangeMs[0]  = now;
                 } else {
-                    // Stable — check if we need to (re)translate
+                    // Stable - check if we need to (re)translate
                     boolean needsTranslation =
                             !currentText.equals(lastTranslatedText) ||
                             currentVersion != lastTranslatedVersion;
@@ -435,7 +435,7 @@ public class Editor {
                                 "})()"
                             );
                         }
-                        // No need to reset lastTranslatedVersion — _translationVersion already
+                        // No need to reset lastTranslatedVersion - _translationVersion already
                         // incremented when the user typed, so the poller will detect the change.
                     }
                 }
@@ -711,7 +711,7 @@ public class Editor {
     private void retranslate(String langCode, String source) {
         if (translationManager == null || !isCollabConnected() || translating) return;
 
-        // Always translate from the English original — never from an already-translated doc
+        // Always translate from the English original - never from an already-translated doc
         String deltaJson = (String) quill.executeScript(
             "(function(){ return window._originalDelta || JSON.stringify(quill.getContents()); })()");
         if (deltaJson == null) return;
@@ -868,7 +868,7 @@ public class Editor {
 
     public String getContent() {
         // If translation is active, always save/send the original-language content,
-        // not the translated view — so reopening the file shows the author's language.
+        // not the translated view - so reopening the file shows the author's language.
         Object result = quill.executeScript(
             "(function(){ return window._originalDelta || JSON.stringify(quill.getContents()); })()");
         return result != null ? result.toString() : "";
