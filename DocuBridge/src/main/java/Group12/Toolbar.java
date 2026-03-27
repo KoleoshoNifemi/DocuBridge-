@@ -574,6 +574,16 @@ public class Toolbar {
     private MenuButton createTranslationMenu() {
         translationMenu = new MenuButton("Translation");
         translationMenu.setStyle("-fx-font-size: 14;");
+        translationMenu.setTooltip(new Tooltip("Live translation updates as you type — works best in a collaboration session"));
+
+        MenuItem hint = new MenuItem("⚠  Join a collab session for live translation");
+        hint.setStyle("-fx-text-fill: grey; -fx-font-size: 11;");
+        hint.setDisable(true);
+        translationMenu.getItems().add(hint);
+
+        SeparatorMenuItem sep = new SeparatorMenuItem();
+        translationMenu.getItems().add(sep);
+
         // "No Translation" = turn off, restore original native language
         // All other options are real translation targets
         String[] languages = {"No Translation", "English", "French", "German", "Greek", "Portuguese", "Spanish"};

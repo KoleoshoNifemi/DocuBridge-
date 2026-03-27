@@ -349,13 +349,14 @@ public class Editor {
         quill.executeScript(
             "(function(){" +
             "  if (!window._originalDelta) window._originalDelta = JSON.stringify(quill.getContents());" +
+            "  var savedSel = quill.getSelection();" +
             "  window._applyingTranslation = true;" +
             "  try { quill.setContents(JSON.parse(window._pendingTranslatedDelta), 'api'); } catch(e){}" +
             "  window._applyingTranslation = false;" +
             "  window._pendingTranslatedDelta = null;" +
-            // Refocus so formatting buttons work; don't setSelection with a stale index
-            // from the old translated content (different character lengths cause mid-word placement).
-            "  quill.focus();" +
+            "  var newLen = Math.max(0, quill.getLength() - 1);" +
+            "  if (savedSel) { quill.setSelection(Math.min(savedSel.index, newLen), 0); }" +
+            "  else { quill.setSelection(newLen, 0); }" +
             "})()"
         );
     }

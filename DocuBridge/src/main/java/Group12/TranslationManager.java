@@ -112,18 +112,43 @@ public class TranslationManager {
                 JSONObject delta = new JSONObject(deltaJson);
                 JSONArray ops = delta.getJSONArray("ops");
 
-                // Collect indices and text of ops that need translation (skip \n and image ops)
-                List<Integer> textOpIndices = new ArrayList<>();
-                List<String>  textsToTranslate = new ArrayList<>();
+                // Split each text op on embedded \n before sending to Azure so that
+                // paragraph breaks are never included in a translated segment. Each \n
+                // is recorded as a sentinel and stitched back in after translation.
+                // opSegments[i] is null for non-text ops; otherwise a list where each
+                // entry is either {"n"} (a preserved newline) or {"t", originalText, batchIndex}.
+                List<List<String[]>> opSegments = new ArrayList<>();
+                List<String> textsToTranslate = new ArrayList<>();
+
                 for (int i = 0; i < ops.length(); i++) {
                     JSONObject op = ops.getJSONObject(i);
-                    if (!op.has("insert")) continue;
+                    if (!op.has("insert")) { opSegments.add(null); continue; }
                     Object insert = op.get("insert");
-                    if (!(insert instanceof String)) continue;       // skip image/embed ops
+                    if (!(insert instanceof String)) { opSegments.add(null); continue; }
                     String text = (String) insert;
-                    if (text.isEmpty() || text.equals("\n")) continue; // skip bare newlines
-                    textOpIndices.add(i);
-                    textsToTranslate.add(text);
+                    if (text.isEmpty()) { opSegments.add(null); continue; }
+
+                    List<String[]> segments = new ArrayList<>();
+                    StringBuilder buf = new StringBuilder();
+                    for (char c : text.toCharArray()) {
+                        if (c == '\n') {
+                            if (buf.length() > 0) {
+                                int idx = textsToTranslate.size();
+                                textsToTranslate.add(buf.toString());
+                                segments.add(new String[]{"t", buf.toString(), String.valueOf(idx)});
+                                buf.setLength(0);
+                            }
+                            segments.add(new String[]{"n"});
+                        } else {
+                            buf.append(c);
+                        }
+                    }
+                    if (buf.length() > 0) {
+                        int idx = textsToTranslate.size();
+                        textsToTranslate.add(buf.toString());
+                        segments.add(new String[]{"t", buf.toString(), String.valueOf(idx)});
+                    }
+                    opSegments.add(segments.isEmpty() ? null : segments);
                 }
 
                 if (textsToTranslate.isEmpty()) {
@@ -137,26 +162,33 @@ public class TranslationManager {
                     return;
                 }
 
-                // Sanitise: Azure occasionally inserts \n into a single translated run,
-                // which creates unwanted paragraph breaks when applied to Quill.
-                // Replace embedded newlines with a space and fall back to original text
-                // if the translation came back empty.
+                // Sanitise: fall back to original if Azure returns empty; strip any \r.
+                // Each segment is already guaranteed \n-free (we split on them above),
+                // so any \n Azure injects into a segment is spurious and gets stripped.
                 for (int i = 0; i < translated.size(); i++) {
                     String t = translated.get(i);
                     if (t == null || t.isEmpty()) {
-                        translated.set(i, textsToTranslate.get(i)); // keep original
+                        translated.set(i, textsToTranslate.get(i));
                     } else {
                         translated.set(i, t.replace("\n", " ").replace("\r", ""));
                     }
                 }
 
-                // Rebuild ops with translated text, all attributes unchanged
+                // Rebuild ops: reassemble each op's text from its segments, with \n restored.
                 JSONArray newOps = new JSONArray();
-                int ptr = 0;
                 for (int i = 0; i < ops.length(); i++) {
                     JSONObject op = new JSONObject(ops.getJSONObject(i).toString()); // clone
-                    if (ptr < textOpIndices.size() && textOpIndices.get(ptr) == i) {
-                        op.put("insert", translated.get(ptr++));
+                    List<String[]> segments = opSegments.get(i);
+                    if (segments != null) {
+                        StringBuilder sb = new StringBuilder();
+                        for (String[] seg : segments) {
+                            if ("n".equals(seg[0])) {
+                                sb.append('\n');
+                            } else {
+                                sb.append(translated.get(Integer.parseInt(seg[2])));
+                            }
+                        }
+                        op.put("insert", sb.toString());
                     }
                     newOps.put(op);
                 }
