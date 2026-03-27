@@ -754,7 +754,18 @@ public class Editor {
                     case F -> { event.consume(); showSearch(); }
                     case EQUALS -> { event.consume(); if (event.isShiftDown()) fontSizeShortcut("+", "user"); }
                     case MINUS  -> { event.consume(); if (event.isShiftDown()) fontSizeShortcut("-", "user"); }
+                    case BACK_SPACE -> { event.consume(); Platform.runLater(() -> quill.executeScript("(function(){ var sel = quill.getSelection(); if (!sel) return; var idx = sel.index; if (sel.length > 0) { quill.deleteText(idx, sel.length, 'user'); return; } if (idx === 0) return; var text = quill.getText(0, idx); var i = idx; while (i > 0 && text[i-1] === ' ') i--; while (i > 0 && text[i-1] !== ' ' && text[i-1] !== '\\n') i--; quill.deleteText(i, idx - i, 'user'); })()")); }
+                    case DELETE -> { event.consume(); Platform.runLater(() -> quill.executeScript("(function(){ var sel = quill.getSelection(); if (!sel) return; var idx = sel.index; if (sel.length > 0) { quill.deleteText(idx, sel.length, 'user'); return; } var total = quill.getLength(); if (idx >= total - 1) return; var text = quill.getText(idx, total - idx); var i = 0; while (i < text.length - 1 && text[i] === ' ') i++; while (i < text.length - 1 && text[i] !== ' ' && text[i] !== '\\n') i++; if (i === 0) i = 1; quill.deleteText(idx, i, 'user'); })()")); }
                 }
+            } else if (event.isShiftDown() && event.getCode() == KeyCode.ENTER) {
+                event.consume();
+                Platform.runLater(() -> {
+                    JSObject sel = (JSObject) quill.executeScript("quill.getSelection(true)");
+                    if (sel != null) {
+                        int idx = ((Number) sel.getMember("index")).intValue();
+                        quill.executeScript("quill.insertText(" + idx + ", '\\n', 'user'); quill.setSelection(" + (idx + 1) + ", 0);");
+                    }
+                });
             } else if (event.getCode() == KeyCode.BACK_SPACE) {
                 handleBackspaceInList();
             }
