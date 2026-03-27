@@ -132,6 +132,13 @@
             border: none !important;
         }
 
+        /* Link styling */
+        .ql-editor a[href] {
+            color: #1155CC;
+            text-decoration: underline;
+            cursor: pointer;
+        }
+
         /* ── Remote cursor overlays ─────────────────────────────── */
         .remote-cursor-caret {
             position: absolute;
@@ -163,6 +170,22 @@
 <textarea id="cursorComm" style="display:none"></textarea>
 
 <script>
+    // Override the built-in Link blot to strip target="_blank" and rel="noopener".
+    // Without this, JavaFX WebView spawns a popup WebView window for every link click
+    // instead of letting our capture-phase handler intercept it cleanly.
+    (function() {
+        var Link = Quill.import('formats/link');
+        class InlineLink extends Link {
+            static create(value) {
+                var node = super.create(value);
+                node.removeAttribute('target');
+                node.removeAttribute('rel');
+                return node;
+            }
+        }
+        Quill.register(InlineLink, true);
+    })();
+
     var quill = new Quill('#editor-container', {
         theme: 'snow',
         modules: {
@@ -335,6 +358,33 @@
             Object.keys(cursors).forEach(function(u) { window.removeRemoteCursor(u); });
         };
     })();
+    // ────────────────────────────────────────────────────────────
+
+    // ── Link click → open in system browser ─────────────────────
+    // Use CAPTURE phase (3rd arg = true) so we intercept before the WebView
+    // processes the <a> click and navigates internally.
+    // Java listens to document.title; "OPEN_URL:<url>" triggers Desktop.browse().
+    // Link clicks are intercepted in Java via loadWorker SCHEDULED state.
+    // No JS handler needed here.
+
+    // ── Auto-link: space or Enter after a URL ────────────────────
+    // If the word just before the cursor looks like a URL, wrap it in a link.
+    var URL_RE = /^(https?:\/\/|www\.)\S+/;
+    quill.root.addEventListener('keydown', function(e) {
+        if (e.key !== ' ' && e.key !== 'Enter') return;
+        var sel = quill.getSelection();
+        if (!sel || sel.index === 0) return;
+        var textBefore = quill.getText(0, sel.index);
+        var match = textBefore.match(/(\S+)$/);
+        if (!match) return;
+        var word = match[1];
+        if (!URL_RE.test(word)) return;
+        var url   = word.startsWith('www.') ? 'https://' + word : word;
+        var start = sel.index - word.length;
+        setTimeout(function() {
+            quill.formatText(start, word.length, 'link', url, 'user');
+        }, 0);
+    });
     // ────────────────────────────────────────────────────────────
 
     quill.root.addEventListener('keydown', function(e) {

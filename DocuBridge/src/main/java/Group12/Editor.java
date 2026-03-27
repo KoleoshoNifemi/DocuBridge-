@@ -22,8 +22,10 @@ import java.util.HashMap;
 import java.util.concurrent.Callable;
 import java.util.function.BiConsumer;
 import java.util.function.Consumer;
+import java.awt.Desktop;
 import java.io.File;
 import java.io.IOException;
+import java.net.URI;
 import java.nio.file.Files;
 import java.util.Base64;
 
@@ -58,9 +60,18 @@ public class Editor {
         webView = new WebView();
         quill = webView.getEngine();
         String quillJsPath = getClass().getResource("/quill/editor.html").toExternalForm();
+        // Never let a link spawn a popup WebView window inside the app.
+        quill.setCreatePopupHandler(config -> null);
+
         quill.getLoadWorker().stateProperty().addListener((obs, old, newState) -> {
             if (newState == javafx.concurrent.Worker.State.SUCCEEDED) {
                 waitForQuillReady();
+            } else if (newState == javafx.concurrent.Worker.State.SCHEDULED) {
+                String loc = quill.getLocation();
+                if (loc != null && (loc.startsWith("http://") || loc.startsWith("https://"))) {
+                    Platform.runLater(() -> quill.getLoadWorker().cancel());
+                    new Thread(() -> openInBrowser(loc)).start();
+                }
             }
         });
         quill.load(quillJsPath);
@@ -558,6 +569,28 @@ public class Editor {
         });
     }
 
+    private void openInBrowser(String url) {
+        try {
+            if (Desktop.isDesktopSupported() && Desktop.getDesktop().isSupported(Desktop.Action.BROWSE)) {
+                Desktop.getDesktop().browse(new URI(url));
+                return;
+            }
+        } catch (Exception ex) {
+            System.err.println("Desktop.browse failed: " + ex.getMessage());
+        }
+        // Fallback for environments where Desktop.browse is unavailable (e.g. some Linux setups)
+        try {
+            String os = System.getProperty("os.name").toLowerCase();
+            String[] cmd;
+            if (os.contains("mac"))     cmd = new String[]{"open", url};
+            else if (os.contains("nix") || os.contains("nux")) cmd = new String[]{"xdg-open", url};
+            else                        cmd = new String[]{"rundll32", "url.dll,FileProtocolHandler", url};
+            Runtime.getRuntime().exec(cmd);
+        } catch (Exception ex) {
+            System.err.println("Fallback browser open failed: " + ex.getMessage());
+        }
+    }
+
     private void setFontSize(String size, String source) {
         Platform.runLater(() -> { webView.requestFocus(); quill.executeScript("quill.focus(); quill.format('size','" + size + "','" + source + "');"); forceRepaint(); });
     }
@@ -764,6 +797,7 @@ public class Editor {
         temp.put("undo",            this::undo);
         temp.put("redo",            this::redo);
         temp.put("forceRepaint",    this::forceRepaint);
+        temp.put("applyLink",       () -> applyLink("user"));
         if (saveAs   != null) temp.put("saveAs",   saveAs);
         if (save     != null) temp.put("save",     save);
         if (newFile  != null) temp.put("newFile",  newFile);
