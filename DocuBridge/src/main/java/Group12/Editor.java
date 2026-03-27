@@ -290,12 +290,19 @@ public class Editor {
         JSObject win = (JSObject) quill.executeScript("window");
         win.setMember("_pendingTranslatedDelta", translatedDelta);
         quill.executeScript(
-            // Capture the English original before we overwrite it — only on first call
-            "if (!window._originalDelta) window._originalDelta = JSON.stringify(quill.getContents());" +
-            "window._applyingTranslation = true;" +
-            "try { quill.setContents(JSON.parse(window._pendingTranslatedDelta), 'api'); } catch(e){}" +
-            "window._applyingTranslation = false;" +
-            "window._pendingTranslatedDelta = null;"
+            "(function(){" +
+            "  if (!window._originalDelta) window._originalDelta = JSON.stringify(quill.getContents());" +
+            // Save cursor so setContents doesn't leave selection as null
+            "  var sel = quill.getSelection();" +
+            "  window._applyingTranslation = true;" +
+            "  try { quill.setContents(JSON.parse(window._pendingTranslatedDelta), 'api'); } catch(e){}" +
+            "  window._applyingTranslation = false;" +
+            "  window._pendingTranslatedDelta = null;" +
+            // Restore cursor (clamped to new doc length)
+            "  var newLen = quill.getLength();" +
+            "  var idx = sel ? Math.min(sel.index, Math.max(0, newLen - 1)) : 0;" +
+            "  quill.setSelection(idx, 0, 'silent');" +
+            "})()"
         );
     }
 
@@ -604,10 +611,14 @@ public class Editor {
                 quill.executeScript(
                     "(function(){" +
                     "  if (!window._originalDelta) return;" +
+                    "  var sel = quill.getSelection();" +
                     "  window._applyingTranslation = true;" +
                     "  try { quill.setContents(JSON.parse(window._originalDelta), 'api'); } catch(e){}" +
                     "  window._applyingTranslation = false;" +
                     "  window._originalDelta = null;" +
+                    "  var newLen = quill.getLength();" +
+                    "  var idx = sel ? Math.min(sel.index, Math.max(0, newLen - 1)) : 0;" +
+                    "  quill.setSelection(idx, 0, 'silent');" +
                     "})()"
                 );
             } catch (Exception ignored) {}

@@ -155,6 +155,7 @@ public class CollabClient extends WebSocketClient {
                 quillEngine.executeScript(
                         "(function(){" +
                                 "  if (!window._pendingFullContent) return;" +
+                                "  var sel = quill.getSelection();" +
                                 "  try {" +
                                 "    if (window._originalDelta) {" +
                                 "      window._originalDelta = window._pendingFullContent;" +
@@ -164,6 +165,9 @@ public class CollabClient extends WebSocketClient {
                                 "    console.error('applyFullContent failed: ' + e.message);" +
                                 "  }" +
                                 "  window._pendingFullContent = null;" +
+                                "  var newLen = quill.getLength();" +
+                                "  var idx = sel ? Math.min(sel.index, Math.max(0, newLen - 1)) : 0;" +
+                                "  quill.setSelection(idx, 0, 'silent');" +
                                 "})()"
                 );
                 System.out.println("✓ Synced full document from server");
