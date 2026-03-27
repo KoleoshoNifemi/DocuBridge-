@@ -1,6 +1,6 @@
 # DocuBridge
 
-A full-featured, collaborative desktop word processor built with JavaFX and Quill.js — featuring real-time multi-user editing over WebSocket, cloud-backed file storage on Azure SQL Server, and rich `.docx` export via Apache POI.
+A full-featured, collaborative desktop word processor built with JavaFX and Quill.js — featuring real-time multi-user editing over WebSocket, live document translation powered by Azure Translator, cloud-backed file storage on Azure SQL Server, and rich `.docx` export via Apache POI.
 
 Created by Tharunkaarthik Gopinath, Abdulrehman Nasir, Shehryar Usman, and Koleosho Nifemi.
 
@@ -16,21 +16,45 @@ Created by Tharunkaarthik Gopinath, Abdulrehman Nasir, Shehryar Usman, and Koleo
 - Paragraph alignment (left, center, right, justify)
 - Headers (H1–H3), ordered and unordered lists with nested indentation
 - Inline image insertion with drag-to-resize handles
-- Hyperlink insertion and editing
+- Hyperlink insertion and auto-linking (URLs are detected and linked on Space/Enter)
 - Undo/redo with a 1000-step history stack
+
+### Keyboard Shortcuts
+| Shortcut | Action |
+|---|---|
+| Ctrl+B / I / U | Bold / Italic / Underline |
+| Ctrl+K | Insert / edit hyperlink |
+| Ctrl+Z / Y | Undo / Redo |
+| Ctrl+Shift+Z | Redo |
+| Ctrl+F | Find & Replace |
+| Ctrl+C / X / V | Copy / Cut / Paste |
+| Ctrl+= / Ctrl+- | Increase / Decrease font size |
+| Ctrl+Backspace | Delete word before cursor |
+| Ctrl+Delete | Delete word after cursor |
+| Shift+Enter | Insert soft line break |
 
 ### Real-Time Collaboration
 - Built-in WebSocket server (`CollabServer`) hosted by the session owner on port 8765
 - Clients connect via `CollabClient` using a room code (local IP) or an ngrok tunnel for cross-network sessions
 - Delta-based synchronization using Quill's operational transform protocol — only diffs are sent over the wire, not full document state
 - Live user presence list broadcast to all connected peers
+- Live remote cursor display — see each collaborator's cursor position labeled with their username in a distinct colour
 - Automatic room redirect: joining clients are routed to the active file if only one room is running
 - 80ms delta polling loop for near-real-time responsiveness
+
+### Live Document Translation
+- Powered by **Azure Translator** (Cognitive Services), translating document content in real time as you type
+- Supports English, French, Spanish, German, Greek, and Portuguese
+- Translation preserves all rich formatting — bold, italic, color, font size, headers, and lists are kept intact across language switches
+- "No Translation" option restores the original source text at any time
+- Operates on Quill's delta format directly, translating only text runs while leaving paragraph structure (newlines, attributes) untouched
+- **Works best in a collaboration session** (host or join a room) for fully live re-translation as you type; available in solo mode via the Translation toolbar menu
 
 ### Cloud Authentication & File Storage
 - Azure SQL Server backend storing user accounts and document contents
 - Secure password storage using **BCrypt** hashing (jbcrypt)
 - User registration and login with validation (3-char min username, 6-char min password)
+- Automatic server connection retry on login/signup — if the database is still starting up, the app waits and retries rather than showing a false error
 - Per-user file management: create, open, save, delete documents stored in the cloud
 - Auto-save every 5 seconds while the editor is open
 
@@ -59,13 +83,14 @@ Created by Tharunkaarthik Gopinath, Abdulrehman Nasir, Shehryar Usman, and Koleo
 ```
 Main ──► AuthenticationUI ──► DatabaseManager (Azure SQL)
   │
-  └──► Editor ──► Toolbar         (receives callbacks via HashMap<String, Runnable>)
+  └──► Editor ──► Toolbar              (receives callbacks via HashMap<String, Runnable>)
             │──► WebView/WebEngine ──► editor.html ──► quill.js
-            │──► ClipboardHandler  (JavaFX clipboard ↔ Quill JS via JSObject)
-            │──► WordSearch        (Find & Replace dialog)
-            └──► CollabClient      (WebSocket client)
+            │──► ClipboardHandler      (JavaFX clipboard ↔ Quill JS via JSObject)
+            │──► WordSearch            (Find & Replace dialog)
+            │──► TranslationManager ──► TranslationService (Azure Translator API)
+            └──► CollabClient          (WebSocket client)
                       │
-                 CollabServer      (WebSocket server, port 8765)
+                 CollabServer          (WebSocket server, port 8765)
 ```
 
 ### Java ↔ JavaScript Bridge
@@ -83,6 +108,9 @@ Collaboration deltas are passed back to Java via a hidden `<textarea id="deltaCo
 | `full` | Server → Client | `{ fileName, content: QuillDelta }` |
 | `userlist` | Server → Client | `{ users: string[] }` |
 
+### Translation Architecture
+Translation operates on Quill's delta JSON format rather than plain text, so formatting is preserved across language switches. The `TranslationManager` extracts text runs from delta ops, batches them into a single Azure Translator API call, then rebuilds the delta with translated text and original attributes. Embedded newlines are split out before translation and stitched back in afterward to prevent paragraph structure from being lost.
+
 ---
 
 ## Tech Stack
@@ -97,6 +125,7 @@ Collaboration deltas are passed back to Java via a hidden `<textarea id="deltaCo
 | Cloud database | Azure SQL Server (mssql-jdbc 12.4.2) |
 | Password security | jBCrypt 0.4 |
 | Document export | Apache POI 5.2.3 |
+| Translation | Azure Translator (Cognitive Services) |
 | JSON handling | org.json |
 
 ---
@@ -123,6 +152,12 @@ mvn javafx:run
 1. On the file selector screen, click **Join Session**
 2. Enter the room code or ngrok address provided by the host
 
+### Using Live Translation
+1. Host or join a collaboration session for the best experience
+2. Open the **Translation** menu in the toolbar and select a target language
+3. The document will be translated in real time as you and your collaborators type
+4. Select **No Translation** to restore the original text at any time
+
 ---
 
 ## Project Structure
@@ -130,19 +165,21 @@ mvn javafx:run
 ```
 DocuBridge/
 ├── src/main/java/Group12/
-│   ├── Main.java               # App entry point, window & collab orchestration
-│   ├── Editor.java             # WebView controller, Quill bridge, delta sync
-│   ├── Toolbar.java            # MenuBar & formatting toolbar
-│   ├── ClipboardHandler.java   # JavaFX ↔ Quill clipboard bridge
-│   ├── AuthenticationUI.java   # Login & registration UI
-│   ├── DatabaseManager.java    # Azure SQL CRUD operations
-│   ├── CollabClient.java       # WebSocket collaboration client
-│   ├── CollabServer.java       # WebSocket collaboration server
-│   ├── WordDocumentManager.java# Apache POI .docx export/import
-│   └── WordSearch.java         # Find & Replace dialog
+│   ├── Main.java                # App entry point, window & collab orchestration
+│   ├── Editor.java              # WebView controller, Quill bridge, delta sync, translation poller
+│   ├── Toolbar.java             # MenuBar & formatting toolbar
+│   ├── ClipboardHandler.java    # JavaFX ↔ Quill clipboard bridge
+│   ├── AuthenticationUI.java    # Login & registration UI with server retry logic
+│   ├── DatabaseManager.java     # Azure SQL CRUD operations
+│   ├── CollabClient.java        # WebSocket collaboration client
+│   ├── CollabServer.java        # WebSocket collaboration server
+│   ├── TranslationManager.java  # Azure Translator integration, delta-aware translation
+│   ├── TranslationService.java  # Azure Translator HTTP client
+│   ├── WordDocumentManager.java # Apache POI .docx export/import
+│   └── WordSearch.java          # Find & Replace dialog
 └── src/main/resources/quill/
-    ├── editor.html             # Quill bootstrap & IPC layer
-    ├── quill.js                # Bundled Quill.js library
-    ├── quill.snow.css          # Snow theme stylesheet
-    └── image-tools.js          # Image resize overlay
+    ├── editor.html              # Quill bootstrap & IPC layer
+    ├── quill.js                 # Bundled Quill.js library
+    ├── quill.snow.css           # Snow theme stylesheet
+    └── image-tools.js           # Image resize overlay
 ```
