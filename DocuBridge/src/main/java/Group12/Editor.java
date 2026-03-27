@@ -257,6 +257,7 @@ public class Editor {
                     // Stable for ≥1 s, content differs from last translation, not busy — go
                     translating = true;
                     final String snapshot = currentText;
+                    syncParaFormatsToOriginal(); // copy header/align/list from display → _originalDelta
                     String deltaJson = (String) quill.executeScript(
                         "(function(){ return window._originalDelta || JSON.stringify(quill.getContents()); })()");
                     if (deltaJson != null) {
@@ -283,9 +284,50 @@ public class Editor {
         poll.play();
     }
 
+    /**
+     * Before translating, copies paragraph-level formatting (header, align, list, indent)
+     * from the currently displayed Quill content into _originalDelta by paragraph index.
+     *
+     * Why: when translation is ON the display has e.g. French text while _originalDelta has
+     * English.  A header/alignment delta from the user is relative to the French character
+     * positions, so composing it onto the shorter English text leaves the attribute at the
+     * wrong (or non-existent) position.  Reading the final state of each paragraph's \n op
+     * from the display and copying it to the matching \n in _originalDelta by index is
+     * position-independent and always correct.
+     */
+    private void syncParaFormatsToOriginal() {
+        quill.executeScript(
+            "(function(){" +
+            "  if (!window._originalDelta) return;" +
+            "  var dOps = quill.getContents().ops;" +
+            "  var oData = JSON.parse(window._originalDelta);" +
+            "  var oOps  = oData.ops || [];" +
+            // Collect paragraph-level attrs from every standalone \\n in the display
+            "  var pa = [];" +
+            "  for (var i = 0; i < dOps.length; i++) {" +
+            "    var op = dOps[i];" +
+            "    if (typeof op.insert === 'string' && op.insert === '\\n')" +
+            "      pa.push(op.attributes ? JSON.parse(JSON.stringify(op.attributes)) : null);" +
+            "  }" +
+            // Apply those attrs to the matching \\n ops in _originalDelta by index
+            "  var pi = 0;" +
+            "  for (var i = 0; i < oOps.length; i++) {" +
+            "    if (typeof oOps[i].insert === 'string' && oOps[i].insert === '\\n') {" +
+            "      if (pi < pa.length) {" +
+            "        if (pa[pi]) oOps[i].attributes = pa[pi];" +
+            "        else        delete oOps[i].attributes;" +
+            "      }" +
+            "      pi++;" +
+            "    }" +
+            "  }" +
+            "  window._originalDelta = JSON.stringify({ops: oOps});" +
+            "})()"
+        );
+    }
+
     /** Applies a translated delta JSON to the Quill editor without triggering re-translation.
      *  Also saves window._originalDelta (the pre-translation content) the first time it is called,
-     *  so future language switches always retranslate from the English base. */
+     *  so future language switches always retranslate from the original base. */
     private void applyTranslatedDelta(String translatedDelta) {
         JSObject win = (JSObject) quill.executeScript("window");
         win.setMember("_pendingTranslatedDelta", translatedDelta);
@@ -641,6 +683,7 @@ public class Editor {
 
         translating = true;
         lastTranslatedText = null;
+        syncParaFormatsToOriginal(); // preserve header/align/list across language switch
 
         translationManager.translateDeltaAsync(deltaJson, translatedDelta -> {
             applyTranslatedDelta(translatedDelta);
