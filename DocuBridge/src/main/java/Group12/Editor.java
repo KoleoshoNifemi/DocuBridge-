@@ -46,8 +46,8 @@ public class Editor {
     private boolean bridgeAttached = false;
     private int lastSentCursorIndex  = -2;
     private int lastSentCursorLength = 0;
-    private String  lastTranslatedText  = null;  // plain text of the last content we translated
-    private boolean translating         = false;  // true while an async translation is in-flight
+    private int     lastTranslatedVersion = -1;   // _translationVersion at last completed translation
+    private boolean translating          = false; // true while an async translation is in-flight
 
     private double readDPI() {
         return Screen.getPrimary().getDpi();
@@ -201,6 +201,8 @@ public class Editor {
 
     private void attachJsBridge() {
         bridgeAttached = true;
+        lastTranslatedVersion = -1;
+        translating           = false;
         System.out.println("✓ JS collab bridge attached");
 
         Object reg = quill.executeScript(
@@ -227,12 +229,11 @@ public class Editor {
     }
 
     private void startTranslationPoller() {
-        // stableText[0]   — the last text we saw; used to detect changes
-        // lastChangeTime  — wall-clock ms when stableText last changed
-        // Together they implement a 1 s debounce: we only translate once the
-        // document has been stable for a full second.
-        final String[] stableText    = {null};
-        final long[]   lastChangeMs  = {0};
+        // Use _translationVersion (incremented by every text-change in editor.html, including
+        // formatting-only changes like header/align) instead of plain text so that formatting
+        // edits also trigger a retranslation.
+        final int[]  stableVersion = {-1};
+        final long[] lastChangeMs  = {0};
 
         PauseTransition poll = new PauseTransition(Duration.millis(500));
         poll.setOnFinished(e -> {
@@ -242,36 +243,32 @@ public class Editor {
                 return;
             }
             try {
-                String currentText = (String) quill.executeScript("quill.getText()");
-                if (currentText == null) { if (bridgeAttached && collabClient != null) poll.play(); return; }
-
+                Object verObj = quill.executeScript("window._translationVersion || 0");
+                int currentVersion = verObj instanceof Number ? ((Number) verObj).intValue() : 0;
                 long now = System.currentTimeMillis();
 
-                if (!currentText.equals(stableText[0])) {
-                    // Document changed — reset debounce timer
-                    stableText[0]   = currentText;
-                    lastChangeMs[0] = now;
-                } else if (!currentText.equals(lastTranslatedText)
+                if (currentVersion != stableVersion[0]) {
+                    // Something changed — reset debounce timer
+                    stableVersion[0] = currentVersion;
+                    lastChangeMs[0]  = now;
+                } else if (currentVersion != lastTranslatedVersion
                         && (now - lastChangeMs[0]) >= 1000
                         && !translating) {
-                    // Stable for ≥1 s, content differs from last translation, not busy — go
+                    // Stable for ≥1 s, not yet translated at this version, not busy — go
                     translating = true;
-                    final String snapshot = currentText;
+                    final int snapVersion = currentVersion;
                     syncParaFormatsToOriginal(); // copy header/align/list from display → _originalDelta
                     String deltaJson = (String) quill.executeScript(
                         "(function(){ return window._originalDelta || JSON.stringify(quill.getContents()); })()");
                     if (deltaJson != null) {
                         translationManager.translateDeltaAsync(deltaJson, translatedDelta -> {
-                            // Stale-check: if doc changed while we were translating, discard
-                            String nowText = (String) quill.executeScript("quill.getText()");
-                            if (snapshot.equals(nowText)) {
+                            Object nowVerObj = quill.executeScript("window._translationVersion || 0");
+                            int nowVersion = nowVerObj instanceof Number ? ((Number) nowVerObj).intValue() : 0;
+                            if (snapVersion == nowVersion) {
                                 applyTranslatedDelta(translatedDelta);
-                                // Record the post-translation text so the poller doesn't immediately re-fire
-                                String afterText = (String) quill.executeScript("quill.getText()");
-                                lastTranslatedText = afterText != null ? afterText : snapshot;
-                            } else {
-                                lastTranslatedText = null; // force retry on next stable window
+                                lastTranslatedVersion = snapVersion;
                             }
+                            // if version changed during translation, poller will retry automatically
                             translating = false;
                         });
                     } else {
@@ -334,16 +331,13 @@ public class Editor {
         quill.executeScript(
             "(function(){" +
             "  if (!window._originalDelta) window._originalDelta = JSON.stringify(quill.getContents());" +
-            // Save cursor so setContents doesn't leave selection as null
-            "  var sel = quill.getSelection();" +
             "  window._applyingTranslation = true;" +
             "  try { quill.setContents(JSON.parse(window._pendingTranslatedDelta), 'api'); } catch(e){}" +
             "  window._applyingTranslation = false;" +
             "  window._pendingTranslatedDelta = null;" +
-            // Restore cursor (clamped to new doc length)
-            "  var newLen = quill.getLength();" +
-            "  var idx = sel ? Math.min(sel.index, Math.max(0, newLen - 1)) : 0;" +
-            "  quill.setSelection(idx, 0, 'silent');" +
+            // Refocus so formatting buttons work; don't setSelection with a stale index
+            // from the old translated content (different character lengths cause mid-word placement).
+            "  quill.focus();" +
             "})()"
         );
     }
@@ -422,7 +416,8 @@ public class Editor {
                                 "})()"
                             );
                         }
-                        lastTranslatedText = null; // force poller to retranslate with new content
+                        // No need to reset lastTranslatedVersion — _translationVersion already
+                        // incremented when the user typed, so the poller will detect the change.
                     }
                 }
             } catch (Exception ex) {
@@ -436,11 +431,11 @@ public class Editor {
 
     public void disconnectCollab() {
         System.out.println("DEBUG: disconnectCollab called");
-        bridgeAttached = false;
-        lastSentCursorIndex    = -2;
-        lastSentCursorLength   = 0;
-        lastTranslatedText = null;
-        translating        = false;
+        bridgeAttached        = false;
+        lastSentCursorIndex   = -2;
+        lastSentCursorLength  = 0;
+        lastTranslatedVersion = -1;
+        translating           = false;
         if (translationManager != null) translationManager.disableTranslation();
         try {
             quill.executeScript("if (typeof window.clearAllRemoteCursors === 'function') window.clearAllRemoteCursors();");
@@ -653,14 +648,11 @@ public class Editor {
                 quill.executeScript(
                     "(function(){" +
                     "  if (!window._originalDelta) return;" +
-                    "  var sel = quill.getSelection();" +
                     "  window._applyingTranslation = true;" +
                     "  try { quill.setContents(JSON.parse(window._originalDelta), 'api'); } catch(e){}" +
                     "  window._applyingTranslation = false;" +
                     "  window._originalDelta = null;" +
-                    "  var newLen = quill.getLength();" +
-                    "  var idx = sel ? Math.min(sel.index, Math.max(0, newLen - 1)) : 0;" +
-                    "  quill.setSelection(idx, 0, 'silent');" +
+                    "  quill.focus();" +
                     "})()"
                 );
             } catch (Exception ignored) {}
@@ -682,13 +674,12 @@ public class Editor {
         if (deltaJson == null) return;
 
         translating = true;
-        lastTranslatedText = null;
         syncParaFormatsToOriginal(); // preserve header/align/list across language switch
 
         translationManager.translateDeltaAsync(deltaJson, translatedDelta -> {
             applyTranslatedDelta(translatedDelta);
-            String afterText = (String) quill.executeScript("quill.getText()");
-            lastTranslatedText = afterText;
+            Object verObj = quill.executeScript("window._translationVersion || 0");
+            lastTranslatedVersion = verObj instanceof Number ? ((Number) verObj).intValue() : 0;
             translating = false;
         });
     }
