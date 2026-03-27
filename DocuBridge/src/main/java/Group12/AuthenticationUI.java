@@ -10,8 +10,10 @@ import org.mindrot.jbcrypt.BCrypt;
 
 public class AuthenticationUI {
     private DatabaseManager db;
+    //- 1 means no user is logged in yet
     private int currentUserId = -1;
     private String currentUsername = "";
+    //callback fired after a successful login or signup → login
     private Runnable onAuthSuccess;
 
     public AuthenticationUI(DatabaseManager db, Runnable onAuthSuccess) {
@@ -27,6 +29,7 @@ public class AuthenticationUI {
         Label titleLabel = new Label("DocuBridge");
         titleLabel.setStyle("-fx-font-size: 28; -fx-font-weight: bold;");
 
+        //login and signup live in separate tabs so we reuse the same stage
         TabPane tabPane = new TabPane();
         tabPane.getTabs().addAll(
                 createLoginTab(),
@@ -61,6 +64,7 @@ public class AuthenticationUI {
         loginBtn.setStyle("-fx-font-size: 14; -fx-font-weight: bold;");
         loginBtn.setPrefWidth(Double.MAX_VALUE);
 
+        //single label reused for both errors and success messages
         Label statusLabel = new Label();
         statusLabel.setStyle("-fx-text-fill: red;");
         statusLabel.setWrapText(true);
@@ -75,11 +79,14 @@ public class AuthenticationUI {
                 return;
             }
 
+            //disable the button while the DB call is in flight to prevent double-clicks
             loginBtn.setDisable(true);
             statusLabel.setText("Connecting to server, please wait...");
             statusLabel.setStyle("-fx-text-fill: #e67e22;");
 
+            //DB calls block, so they go off the FX thread
             new Thread(() -> {
+                //poll the server before trying to authenticate; bail out if it never comes up
                 if (!waitForServer(statusLabel, 15, 2000)) {
                     Platform.runLater(() -> {
                         loginBtn.setDisable(false);
@@ -89,8 +96,10 @@ public class AuthenticationUI {
                     return;
                 }
                 String hash = db.getPasswordHash(username);
+                //all UI updates must come back to the FX thread
                 Platform.runLater(() -> {
                     loginBtn.setDisable(false);
+                    //hash is null when the username doesn't exist; BCrypt handles the comparison
                     if (hash != null && BCrypt.checkpw(password, hash)) {
                         currentUserId   = db.getUserId(username);
                         currentUsername = username;
@@ -151,6 +160,7 @@ public class AuthenticationUI {
             String password = passwordField.getText();
             String confirm = confirmField.getText();
 
+            //validate everything client-side before hitting the DB
             if (username.isEmpty() || password.isEmpty()) {
                 statusLabel.setText("All fields required");
                 statusLabel.setStyle("-fx-text-fill: red;");
@@ -188,17 +198,20 @@ public class AuthenticationUI {
                     });
                     return;
                 }
+                //hash the password before it ever touches the DB; plain text never stored
                 String hash = BCrypt.hashpw(password, BCrypt.gensalt());
                 boolean success = db.registerUser(username, hash);
                 Platform.runLater(() -> {
                     signupBtn.setDisable(false);
                     if (success) {
+                        //don't auto-login after signup; just prompt them to switch tabs
                         statusLabel.setText("Account created! Switch to Login tab.");
                         statusLabel.setStyle("-fx-text-fill: green;");
                         usernameField.clear();
                         passwordField.clear();
                         confirmField.clear();
                     } else {
+                        //registerUser returns false on a duplicate username (unique constraint)
                         statusLabel.setText("Username already taken");
                         statusLabel.setStyle("-fx-text-fill: red;");
                     }
@@ -230,6 +243,8 @@ public class AuthenticationUI {
         return currentUsername;
     }
 
+    //polls testConnection() up to maxRetries times with delayMs between attempts
+    //runs on a background thread so it's safe to sleep here; UI updates go through Platform.runLater
     private boolean waitForServer(Label statusLabel, int maxRetries, int delayMs) {
         for (int i = 1; i <= maxRetries; i++) {
             if (db.testConnection()) return true;
@@ -239,6 +254,7 @@ public class AuthenticationUI {
             try {
                 Thread.sleep(delayMs);
             } catch (InterruptedException ex) {
+                //restore the interrupt flag and give up; caller will show an error
                 Thread.currentThread().interrupt();
                 return false;
             }

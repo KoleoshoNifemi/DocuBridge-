@@ -20,15 +20,22 @@ import java.util.concurrent.Callable;
 import java.util.function.BiConsumer;
 
 public class Toolbar {
+    //flag to prevent combo box onChange handlers from firing while we're programmatically
+    //updating them to reflect the current cursor's format state
     private boolean isUpdatingUI = false;
 
     private double dpi;
     private VBox toolbarContainer;
+    //three maps that Editor passes in: fire-and-forget actions, two-param format calls,
+    //and calls that return a value (e.g. reading current formats from Quill)
     private HashMap<String, Runnable> voidFunctions;
     private HashMap<String, BiConsumer<String, String>> formats;
     private HashMap<String, Callable<Object>> returnFunctions;
+    //maps color display names ("Yellow", "Red"...) to their hex strings for Quill
     private HashMap<String, String> rgbColor;
     private Callable<Object> getTextProperties;
+    //after the user picks a font/size we skip a few refresh cycles so the combo prompt
+    //doesn't flicker back to whatever Quill reports before it processes the change
     private int skipFormatRefreshTicks;
     private Button bold;
     private Button italic;
@@ -42,8 +49,10 @@ public class Toolbar {
     private ComboBox<String> headersCombo;
     private MenuButton fontColorCombo;
     private MenuButton highlightCombo;
+    //the colored bar drawn under the Font Color / Highlight buttons to show the active color
     private Rectangle fontColorBar;
     private Rectangle highlightBar;
+    //remembered so we can restore the prompt text during the skip-tick window
     private String lastAppliedFontName;
     private String lastAppliedFontSize;
 
@@ -55,6 +64,7 @@ public class Toolbar {
         return Screen.getPrimary().getDpi();
     }
 
+    //called on a 200ms timer; reads Quill's current format state and updates the toolbar UI
     private void displayTextProperties(){
         Platform.runLater(() -> {
             if (skipFormatRefreshTicks > 0) {
@@ -70,6 +80,7 @@ public class Toolbar {
 
                 Object formatObj = getFormatsCaller.call();
 
+                //if Quill isn't ready yet or returned something unexpected, just show defaults
                 if (!(formatObj instanceof JSObject)) {
                     setAllUIElementsToDefaults();
                     return;
@@ -84,7 +95,10 @@ public class Toolbar {
         });
     }
 
+    //takes the JSObject that Quill's getFormat() returned and syncs every toolbar control to it
     private void updateUIFromFormats(JSObject formats) {
+        //if we're still in the skip window, keep showing what the user just applied
+        //instead of letting the refresh overwrite the prompt text with stale data
         if (skipFormatRefreshTicks > 0) {
             if (fontTypeCombo != null && lastAppliedFontName != null) {
                 fontTypeCombo.setPromptText(lastAppliedFontName);
@@ -94,6 +108,7 @@ public class Toolbar {
             }
             return;
         }
+        //set the flag so combo onChange handlers know this is a programmatic update, not user input
         isUpdatingUI = true;
 
         if (isTruthy(formats.getMember("bold"))) {
@@ -114,6 +129,7 @@ public class Toolbar {
             underline.setStyle("-fx-underline: true;");
         }
 
+        //sub and super share the same "script" property in Quill, so we read it once
         Object scriptVal = formats.getMember("script");
         String scriptStr = scriptVal != null ? scriptVal.toString() : "";
 
@@ -129,6 +145,7 @@ public class Toolbar {
             superscript.setStyle("-fx-font-size: 14;");
         }
 
+        //strikethrough uses a Text graphic instead of button text, so we have to style both
         if (isTruthy(formats.getMember("strike"))) {
             strikethrough.setStyle("-fx-background-color: #AAAAAA;");
             if (strikethrough.getGraphic() instanceof Text) {
@@ -143,6 +160,8 @@ public class Toolbar {
             }
         }
 
+        //font name from Quill comes as a css-style slug (e.g. "times-new-roman"),
+        //displayFontName converts it back to "Times New Roman" for the combo prompt
         Object fontVal = formats.getMember("font");
         String fontName = getStringValue(fontVal, "Arial");
         fontName = displayFontName(fontName);
@@ -155,12 +174,14 @@ public class Toolbar {
             }
         }
 
+        //Quill stores size in px; convertSizeToPt converts to pt for display
         Object sizeVal = formats.getMember("size");
         if (fontSizeCombo != null) {
             String sizeDisplay = convertSizeToPt(sizeVal);
             fontSizeCombo.setPromptText(sizeDisplay);
         }
 
+        //update the color bar under the Font Color button to reflect the current selection's color
         Object colorVal = formats.getMember("color");
         String colorStr = getStringValue(colorVal, null);
         if (fontColorBar != null) {
@@ -175,6 +196,7 @@ public class Toolbar {
             }
         }
 
+        //same idea for the highlight bar
         Object bgVal = formats.getMember("background");
         String bgStr = getStringValue(bgVal, null);
         if (highlightBar != null) {
@@ -189,6 +211,7 @@ public class Toolbar {
             }
         }
 
+        //Quill returns align as lowercase ("center"), combo items are title-case ("Center")
         Object alignVal = formats.getMember("align");
         if (alignmentCombo != null) {
             String alignStr = getStringValue(alignVal, null);
@@ -203,8 +226,10 @@ public class Toolbar {
             }
             alignmentCombo.setPromptText(displayAlign);
         }
+        //clear the flag before handling headers, since headers don't trigger onChange anyway
         isUpdatingUI = false;
 
+        //Quill returns header level as a number string ("1", "2"...) or "false" when not active
         Object headerVal = formats.getMember("header");
         if (headersCombo != null) {
             String headerStr = getStringValue(headerVal, null);
@@ -216,6 +241,7 @@ public class Toolbar {
         }
     }
 
+    //null-safe helper that normalizes JS "undefined" and empty strings to a default value
     private String getStringValue(Object val, String defaultValue) {
         if (val == null) return defaultValue;
         String str = val.toString();
@@ -223,6 +249,7 @@ public class Toolbar {
         return str;
     }
 
+    //Quill stores font size in px; we show pt in the UI (px * 3/4 = pt)
     private String convertSizeToPt(Object sizeVal) {
         if (sizeVal == null) return "12";
         String sizeStr = sizeVal.toString();
@@ -239,6 +266,8 @@ public class Toolbar {
         }
     }
 
+    //JS values coming back over the bridge can be Boolean, "true"/"false" strings,
+    //or "undefined", so we need a unified truthiness check
     private boolean isTruthy(Object value) {
         if (value == null) return false;
         if (value instanceof Boolean) return (Boolean) value;
@@ -246,6 +275,8 @@ public class Toolbar {
         return !str.isEmpty() && !str.equals("false") && !str.equals("undefined");
     }
 
+    //builds the name→hex map used when passing a chosen color to Quill
+    //null Color entries map to "transparent" (used for "No Color")
     private void defineRGBColor(String[] colorNames, Color[] colors) {
         rgbColor = new HashMap<>();
         for (int x = 0; x < colorNames.length; x++) {
@@ -261,6 +292,7 @@ public class Toolbar {
         }
     }
 
+    //assembles the full toolbar: the menu bar on top, format button row below it
     private void createToolbar() {
         MenuBar menuBar = new MenuBar();
 
@@ -274,6 +306,7 @@ public class Toolbar {
 
         ToolBar formatToolbar = new ToolBar();
 
+        //index 0 (null) is reserved for "No Color" / "transparent"; actual colors start at 1
         Color[] colors = {null, Color.YELLOW, Color.LIME, Color.CYAN, Color.MAGENTA, Color.BLUE,
                 Color.RED, Color.NAVY, Color.TEAL, Color.GREEN, Color.PURPLE,
                 Color.MAROON, Color.GRAY, Color.SILVER, Color.BLACK, Color.WHITE};
@@ -296,6 +329,7 @@ public class Toolbar {
                 fontTypeCombo = createFontTypeOptions(),
                 fontSizeCombo = createFontSizeOptions(),
                 createSeparator(),
+                //font color and highlight are VBoxes: button on top, thin color-preview bar below
                 createFontColorContainer(colors, names),
                 createHighlightContainer(colors, names),
                 createSeparator(),
@@ -308,9 +342,11 @@ public class Toolbar {
         toolbarContainer = new VBox(menuBar, formatToolbar);
     }
 
+    //builds the Collab menu with live status display and host/connect controls
     private Menu createCollabMenu() {
         Menu menu = new Menu("Collab");
 
+        //status item is read-only; it gets updated via updateCollabStatus()
         collabStatusItem = new MenuItem("○ Offline");
         collabStatusItem.setDisable(true);
 
@@ -341,6 +377,7 @@ public class Toolbar {
         return menu;
     }
 
+    //called by Editor (or the collab layer) to push a status change into the UI thread
     public void updateCollabStatus(String status, String details) {
         Platform.runLater(() -> {
             switch (status) {
@@ -364,6 +401,7 @@ public class Toolbar {
         return new Separator(Orientation.VERTICAL);
     }
 
+    //routes to a specialized creator for each named menu so each one can have custom logic
     private Menu createMenu(String menuName, String[] itemNames) {
         if (menuName.equals("Edit"))   return createEditMenu(itemNames);
         if (menuName.equals("Format")) return createFormatMenu(itemNames);
@@ -397,6 +435,7 @@ public class Toolbar {
         return menu;
     }
 
+    //strips "Align " prefix from the item name to get the raw alignment value Quill expects
     private Menu createFormatMenu(String[] itemNames) {
         Menu menu = new Menu("Format");
         for (String name : itemNames) {
@@ -431,6 +470,7 @@ public class Toolbar {
         return menu;
     }
 
+    //List gets a submenu; Image and Link have their own handlers; anything else falls through as a no-op item
     private Menu createInsertMenu(String[] itemNames) {
         Menu menu = new Menu("Insert");
         for (String name : itemNames) {
@@ -469,6 +509,7 @@ public class Toolbar {
         return menu;
     }
 
+    //fallback for any menu that doesn't need custom item behavior
     private Menu createDefaultMenu(String menuName, String[] itemNames) {
         Menu menu = new Menu(menuName);
         for (String name : itemNames) menu.getItems().add(new MenuItem(name));
@@ -490,15 +531,18 @@ public class Toolbar {
             if (value instanceof Integer) {
                 size = (Integer) value;
             } else if (value instanceof String) {
+                //user typed a custom size; bail out with a clear if it's not a valid number
                 try { size = Integer.parseInt(((String) value).trim()); } catch (NumberFormatException ex) {
                     fontSizeCombo.getEditor().clear(); return;
                 }
             }
             if (size != null) {
+                //pt → px conversion (pt * 4/3 = px) before handing off to Quill
                 int px = (int) Math.round(size * 4.0 / 3.0);
                 skipFormatRefreshTicks = 10;
                 formats.get("setFontSize").accept(px + "px", "user");
                 fontSizeCombo.setPromptText(String.valueOf(size));
+                //clear the selection so the combo shows the prompt text, not the value
                 Platform.runLater(() -> {
                     fontSizeCombo.getSelectionModel().clearSelection();
                     fontSizeCombo.setValue(null);
@@ -514,6 +558,7 @@ public class Toolbar {
         fontType.setPrefWidth(100);
         fontType.setPromptText("Font");
         fontType.setOnAction(e -> {
+            //skip when we're the ones setting the value during a toolbar refresh
             if (isUpdatingUI) return;
             String value = fontType.getValue();
             if (value != null && !value.isEmpty()) {
@@ -558,7 +603,9 @@ public class Toolbar {
             if (selected != null) {
                 BiConsumer<String, String> fn = formats.get("setHeader");
                 if (fn != null) {
+                    //"No Header" → "none"; "Header 3" → "3"
                     fn.accept(selected.equals("No Header") ? "none" : selected.replace("Header ", ""), "user");
+                    //reset value so the combo shows the prompt instead of the selected item
                     Platform.runLater(() -> {
                         try { headersCombo.setValue(null); } catch (Exception ex) {}
                     });
@@ -568,6 +615,7 @@ public class Toolbar {
         return headersCombo;
     }
 
+    //builds the translation dropdown; shows a hint that live translation works best in collab mode
     private MenuButton createTranslationMenu() {
         translationMenu = new MenuButton("Translation");
         translationMenu.setStyle("-fx-font-size: 14;");
@@ -598,8 +646,10 @@ public class Toolbar {
                     BiConsumer<String, String> fn = formats.get("toggleTranslation");
                     if (fn != null) {
                         fn.accept(langCode, "enable");
+                        //⇄ arrow in the button label signals translation is active
                         translationMenu.setText("\u21C4 " + language);
                         System.out.println("✓ Changed translation to: " + language + " (" + langCode + ")");
+                        //immediately re-translate the current document content with the new target language
                         BiConsumer<String, String> retranslate = formats.get("retranslate");
                         if (retranslate != null) retranslate.accept(langCode, "user");
                     }
@@ -622,6 +672,8 @@ public class Toolbar {
         }
     }
 
+    //strikethrough can't use text labels because JavaFX buttons don't support text-decoration,
+    //so we use a Text node as the graphic instead
     private Button createStrikethroughButton() {
         Button button = new Button();
         Text strikeText = new Text("S");
@@ -641,8 +693,11 @@ public class Toolbar {
         return button;
     }
 
+    //wires up a button's click handler; for format buttons we check the current state first
+    //so clicking acts as a toggle (on if currently off, off if currently on)
     private void setButtonActions(Button button, String functionName, String param1, String param2) {
         if (voidFunctions.containsKey(functionName)) {
+            //simple actions like undo/redo just fire and forget
             button.setOnAction(event -> voidFunctions.get(functionName).run());
         } else {
             button.setOnAction(event -> {
@@ -654,6 +709,7 @@ public class Toolbar {
                         if (formatObj instanceof JSObject) {
                             JSObject currentFormats = (JSObject) formatObj;
                             Object currentValue = currentFormats.getMember(param1);
+                            //if the format is already active, toggle it off; otherwise apply it
                             if (isTruthy(currentValue)) {
                                 format.accept(param1, "user");
                                 resetButtonStyle(button, param1);
@@ -665,11 +721,13 @@ public class Toolbar {
                         }
                     }
                 } catch (Exception e) {}
+                //fallback if we couldn't read current state - just apply the format
                 format.accept(param1, param2);
             });
         }
     }
 
+    //visually marks a format button as active (blue text + grey background)
     private void highlightButtonStyle(Button button, String formatType) {
         String baseStyle = button.getStyle();
         if (baseStyle == null) baseStyle = "";
@@ -683,6 +741,7 @@ public class Toolbar {
         }
     }
 
+    //restores a button to its default (inactive) style - each format type has its own base style
     private void resetButtonStyle(Button button, String formatType) {
         if (formatType.equals("strike") && button.getGraphic() instanceof Text) {
             ((Text) button.getGraphic()).setStyle("-fx-font-size: 14;");
@@ -698,6 +757,8 @@ public class Toolbar {
         }
     }
 
+    //resets every toolbar control to its default appearance - used when there's no selection
+    //or when Quill isn't ready yet
     private void setAllUIElementsToDefaults() {
         bold.setStyle("-fx-font-weight: bold;");
         italic.setStyle("-fx-font-style: italic;");
@@ -713,6 +774,8 @@ public class Toolbar {
         if (headersCombo  != null) headersCombo.setPromptText("Headers");
     }
 
+    //Editor passes in three function maps instead of a direct reference so Toolbar stays
+    //decoupled and doesn't need to know anything about WebView or Quill internals
     public Toolbar(HashMap<String, Runnable> voidFunctions,
                    HashMap<String, BiConsumer<String, String>> formats,
                    HashMap<String, Callable<Object>> returnFunctions) {
@@ -722,6 +785,8 @@ public class Toolbar {
         this.returnFunctions = returnFunctions;
         createToolbar();
 
+        //wait 1 second after startup before beginning the format-polling loop;
+        //Quill needs a moment to finish initializing before we can call getFormats()
         Timeline delayTimeline = new Timeline(new KeyFrame(Duration.millis(1000), event -> {
             Timeline updateTimeline = new Timeline(new KeyFrame(Duration.millis(200), e -> displayTextProperties()));
             updateTimeline.setCycleCount(Timeline.INDEFINITE);
@@ -734,6 +799,7 @@ public class Toolbar {
         return toolbarContainer;
     }
 
+    //wraps the font color MenuButton with a thin color-preview bar below it
     private VBox createFontColorContainer(Color[] colors, String[] names) {
         fontColorCombo = createFontColorCombo(colors, names);
         fontColorBar = new Rectangle(100, 4);
@@ -745,6 +811,7 @@ public class Toolbar {
         return container;
     }
 
+    //same pattern as createFontColorContainer, defaulting to transparent (no highlight)
     private VBox createHighlightContainer(Color[] colors, String[] names) {
         highlightCombo = createHighlightCombo(colors, names);
         highlightBar = new Rectangle(100, 4);
@@ -756,6 +823,8 @@ public class Toolbar {
         return container;
     }
 
+    //builds the font color picker as a 3×5 grid of color swatches inside a MenuButton;
+    //index 0 (null/"No Color") is skipped here since transparent text doesn't make sense
     private MenuButton createFontColorCombo(Color[] colors, String[] names) {
         MenuButton colorMenu = new MenuButton("Font Color");
         colorMenu.setPrefWidth(100);
@@ -787,11 +856,14 @@ public class Toolbar {
             }
         }
         CustomMenuItem colorMenuItem = new CustomMenuItem(colorGrid);
+        //keep the menu open while the user is clicking around the grid
         colorMenuItem.setHideOnClick(false);
         colorMenu.getItems().add(colorMenuItem);
         return colorMenu;
     }
 
+    //highlight picker is the same as font color but skips White (last entry) and adds
+    //an explicit "No Highlight" item at the top to remove background color
     private MenuButton createHighlightCombo(Color[] colors, String[] names) {
         MenuButton highlightMenu = new MenuButton("Highlight");
         highlightMenu.setPrefWidth(100);
@@ -803,6 +875,7 @@ public class Toolbar {
         for (int row = 0; row < 3; row++) {
             for (int col = 0; col < 5; col++) {
                 if (index < colors.length) {
+                    //skip White - white highlight on white paper is invisible and confusing
                     if (index == colors.length - 1) break;
                     Color color = colors[index] == null ? Color.TRANSPARENT : colors[index];
                     String colorName = names[index];
@@ -826,6 +899,7 @@ public class Toolbar {
         MenuItem noHighlight = new MenuItem("✕  No Highlight");
         noHighlight.setOnAction(e -> {
             BiConsumer<String, String> format = formats.get("setHighlightColor");
+            //passing empty string tells Quill to remove the background attribute entirely
             if (format != null) format.accept("", "user");
             highlightMenu.hide();
         });
@@ -840,6 +914,8 @@ public class Toolbar {
         return highlightMenu;
     }
 
+    //Quill uses lowercase, possibly hyphenated font names; this normalizes user-selected
+    //display names back to the exact strings Quill's font whitelist expects
     private String normalizeFontValue(String value) {
         if (value == null) return "Arial";
         switch (value.trim().toLowerCase()) {
@@ -851,6 +927,8 @@ public class Toolbar {
         }
     }
 
+    //Quill may return font names as "times-new-roman"; convert hyphens to spaces and
+    //capitalize the first letter so the combo box prompt looks like a proper font name
     private String displayFontName(String fontValue) {
         if (fontValue == null) return "Arial";
         String cleaned = fontValue.trim();

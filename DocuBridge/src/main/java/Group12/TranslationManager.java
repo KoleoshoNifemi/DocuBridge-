@@ -7,6 +7,8 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.function.Consumer;
 
+//sits between the UI and TranslationService - handles enable/disable state and
+//makes sure callbacks always come back on the JavaFX thread
 public class TranslationManager {
     private TranslationService translationService;
     private String targetLanguage = null;
@@ -17,16 +19,19 @@ public class TranslationManager {
         this.translationService = new TranslationService(subscriptionKey, region, endpoint);
     }
 
+    //setting targetLanguage to non-null is what "turns on" translation throughout this class
     public void enableTranslation(String targetLangCode) {
         this.targetLanguage = targetLangCode;
         System.out.println("DEBUG: ✓ Translation ENABLED for: " + targetLangCode);
     }
 
+    //null targetLanguage is the off switch - every method checks this before doing any work
     public void disableTranslation() {
         this.targetLanguage = null;
         System.out.println("DEBUG: ✓ Translation DISABLED");
     }
 
+    //hardcoded list of supported languages - lang code is what gets sent to Azure
     public static String[][] getSupportedLanguages() {
         return new String[][] {
                 {"English", "en"},
@@ -37,6 +42,8 @@ public class TranslationManager {
         };
     }
 
+    //lightweight async translate for short text (e.g. a single typed word)
+    //if translation is off, just returns the original text immediately
     public void translateTextAsync(String text, Consumer<String> callback) {
         if (targetLanguage == null) {
             System.out.println("DEBUG: translateTextAsync - no target language, returning original");
@@ -48,8 +55,10 @@ public class TranslationManager {
             try {
                 System.out.println("DEBUG: translateTextAsync - translating: " + text.substring(0, Math.min(50, text.length())));
                 String translated = translationService.translate(text, sourceLanguage, targetLanguage);
+                //always marshal back to the FX thread before touching UI state
                 Platform.runLater(() -> {
                     System.out.println("DEBUG: translateTextAsync callback called");
+                    //fall back to original if the API returned nothing
                     callback.accept(translated != null ? translated : text);
                 });
             } catch (Exception e) {
@@ -59,6 +68,8 @@ public class TranslationManager {
         }, "translator").start();
     }
 
+    //same idea as translateTextAsync but with more guard checks and logging
+    //used when translating the full document text (plain string, no delta)
     public void translatePlainText(String text, Consumer<String> callback) {
         System.out.println("DEBUG: translatePlainText called");
         System.out.println("DEBUG: targetLanguage=" + targetLanguage);
@@ -122,27 +133,32 @@ public class TranslationManager {
 
                 for (int i = 0; i < ops.length(); i++) {
                     JSONObject op = ops.getJSONObject(i);
+                    //skip ops that aren't inserts (e.g. retain/delete) and non-string inserts (e.g. embedded images)
                     if (!op.has("insert")) { opSegments.add(null); continue; }
                     Object insert = op.get("insert");
                     if (!(insert instanceof String)) { opSegments.add(null); continue; }
                     String text = (String) insert;
                     if (text.isEmpty()) { opSegments.add(null); continue; }
 
+                    //walk char-by-char so we can split on \n without losing where each piece maps to in the batch
                     List<String[]> segments = new ArrayList<>();
                     StringBuilder buf = new StringBuilder();
                     for (char c : text.toCharArray()) {
                         if (c == '\n') {
+                            //flush whatever's buffered before the newline as a translate segment
                             if (buf.length() > 0) {
                                 int idx = textsToTranslate.size();
                                 textsToTranslate.add(buf.toString());
                                 segments.add(new String[]{"t", buf.toString(), String.valueOf(idx)});
                                 buf.setLength(0);
                             }
+                            //store the newline as a sentinel so we can put it back later
                             segments.add(new String[]{"n"});
                         } else {
                             buf.append(c);
                         }
                     }
+                    //flush any remaining text after the last \n (or the whole string if no \n)
                     if (buf.length() > 0) {
                         int idx = textsToTranslate.size();
                         textsToTranslate.add(buf.toString());
@@ -151,12 +167,15 @@ public class TranslationManager {
                     opSegments.add(segments.isEmpty() ? null : segments);
                 }
 
+                //nothing translatable in the whole delta - return as-is
                 if (textsToTranslate.isEmpty()) {
                     Platform.runLater(() -> callback.accept(deltaJson));
                     return;
                 }
 
+                //send all text segments in one batch request to avoid multiple round trips
                 List<String> translated = translationService.translateBatch(textsToTranslate, sourceLanguage, targetLanguage);
+                //if the API failed or returned a mismatched count, bail out with original
                 if (translated == null || translated.size() != textsToTranslate.size()) {
                     Platform.runLater(() -> callback.accept(deltaJson));
                     return;
@@ -183,8 +202,10 @@ public class TranslationManager {
                         StringBuilder sb = new StringBuilder();
                         for (String[] seg : segments) {
                             if ("n".equals(seg[0])) {
+                                //put the newline back exactly where it was
                                 sb.append('\n');
                             } else {
+                                //look up the translated text by the batch index we stored earlier
                                 sb.append(translated.get(Integer.parseInt(seg[2])));
                             }
                         }
@@ -216,6 +237,7 @@ public class TranslationManager {
         return targetLanguage;
     }
 
+    //empty string means "let Azure auto-detect" - that's the default
     public void setSourceLanguage(String langCode) {
         this.sourceLanguage = langCode;
         System.out.println("DEBUG: Source language set to: " + langCode);

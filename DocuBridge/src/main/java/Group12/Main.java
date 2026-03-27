@@ -20,15 +20,15 @@ public class Main extends Application {
     private String currentFileName;
     private TranslationManager translationManager;
 
-    // ── Collab state ──────────────────────────────────────────────
+    //collab state
     private String collabServerHost = null;
     private boolean isHosting = false;
     private String activeRoomCode = null;
-    // ─────────────────────────────────────────────────────────────
 
     public void start(Stage stage) {
         primaryStage = stage;
 
+        //load config.properties from the working directory - db URL and Azure keys live here
         java.util.Properties props = new java.util.Properties();
         try (java.io.FileInputStream fis = new java.io.FileInputStream("config.properties")) {
             props.load(fis);
@@ -45,6 +45,7 @@ public class Main extends Application {
         try {
             db = new DatabaseManager(connectionUrl);
             translationManager = new TranslationManager(azureKey, azureRegion, azureEndpoint);
+            //show login screen; onLoginSuccess fires when the user authenticates
             authUI = new AuthenticationUI(db, this::onLoginSuccess);
             authUI.showAuthScreen(stage);
         } catch (Exception e) {
@@ -60,8 +61,10 @@ public class Main extends Application {
         showFileSelector();
     }
 
+    //shows the "What would you like to do?" modal where users pick or create a file, or join a collab session
     private void showFileSelector() {
         java.util.List<String> userFiles = db.getUserFiles(currentUserId);
+        //most recent files first
         java.util.Collections.reverse(userFiles);
 
         Stage dialog = new Stage();
@@ -84,7 +87,7 @@ public class Main extends Application {
         joinBtn.setToggleGroup(group);
         offlineBtn.setSelected(true);
 
-        // ── Work Offline area ──────────────────────────────────────────
+        //offline vs join toggle
         VBox offlineArea = new VBox(8);
         offlineArea.setPadding(new Insets(2, 0, 4, 20));
 
@@ -96,6 +99,7 @@ public class Main extends Application {
         String blueBtn = "-fx-background-color: #0096C9; -fx-text-fill: white; -fx-font-weight: bold;";
         Button openButton   = new Button("Open");   openButton.setDisable(true); openButton.setStyle(blueBtn);
         Button deleteButton = new Button("Delete"); deleteButton.setDisable(true);
+        //only enable Open/Delete once a file is actually selected
         fileCombo.valueProperty().addListener((obs, o, n) -> {
             boolean sel = n != null && !n.isEmpty();
             openButton.setDisable(!sel);
@@ -114,7 +118,7 @@ public class Main extends Application {
                 new Label("Create New File:"), newFileField
         );
 
-        // ── Join area ──────────────────────────────────────────────────
+        //join session fields
         VBox joinArea = new VBox(6);
         joinArea.setPadding(new Insets(2, 0, 4, 20));
         joinArea.setDisable(true);
@@ -124,13 +128,14 @@ public class Main extends Application {
         codeField.setMaxWidth(380);
         joinArea.getChildren().addAll(new Label("Room code or address:"), codeField);
 
+        //swap which panel is interactive depending on the selected radio button
         group.selectedToggleProperty().addListener((obs, old, now) -> {
             boolean isJoin = now == joinBtn;
             offlineArea.setDisable(isJoin);
             joinArea.setDisable(!isJoin);
         });
 
-        // ── Buttons ────────────────────────────────────────────────────
+        //action buttons
         Button continueBtn = new Button("Continue");
         Button cancelBtn   = new Button("Cancel");
         continueBtn.setDefaultButton(true);
@@ -141,6 +146,7 @@ public class Main extends Application {
         String activeStyle   = "-fx-pref-width: 90px; -fx-background-color: #0096C9; -fx-text-fill: white; -fx-font-weight: bold;";
         String inactiveStyle = "-fx-pref-width: 90px; -fx-background-color: #a8d4e8; -fx-text-fill: white; -fx-font-weight: bold;";
 
+        //Continue button is only active when there's something actionable - new file name typed or a join address entered
         Runnable updateContinue = () -> {
             boolean enabled = offlineBtn.isSelected()
                     ? !newFileField.getText().trim().isEmpty()
@@ -178,6 +184,7 @@ public class Main extends Application {
                 confirm.showAndWait().ifPresent(result -> {
                     if (result == ButtonType.OK) {
                         db.deleteFile(currentUserId, fileToDelete);
+                        //also remove the .docx file from Documents/DocuBridge/
                         String docs = System.getProperty("user.home") + java.io.File.separator + "Documents";
                         String fn   = fileToDelete.endsWith(".docx") ? fileToDelete : fileToDelete + ".docx";
                         java.io.File file = new java.io.File(docs + java.io.File.separator + "DocuBridge" + java.io.File.separator + fn);
@@ -201,6 +208,7 @@ public class Main extends Application {
                     showEditor();
                 }
             } else {
+                //joining a session - resolve room code to an IP, fall back to treating the raw input as a direct address
                 String code = codeField.getText().trim();
                 if (!code.isEmpty()) {
                     String host = CollabServer.resolveHostFromCode(code.toUpperCase());
@@ -221,6 +229,7 @@ public class Main extends Application {
     private void showEditor(String joinAddress) {
         try {
             String displayName = currentFileName != null ? currentFileName : "Connecting...";
+            //don't try to fetch content from DB if we're joining a collab session - the server will push it
             String content     = currentFileName != null ? db.getFileContent(currentUserId, currentFileName) : null;
 
             editor = new Editor(
@@ -242,6 +251,7 @@ public class Main extends Application {
             primaryStage.setScene(scene);
             primaryStage.setMaximized(true);
 
+            //if we're joining, kick off the collab connection after the UI is ready
             if (joinAddress != null) {
                 final String addr = joinAddress;
                 Platform.runLater(() -> {
@@ -265,8 +275,9 @@ public class Main extends Application {
         }
     }
 
-    // ── Collab dialog ─────────────────────────────────────────────
+    //in-editor collab mode switcher (offline / host / join)
 
+    //lets the user switch between offline, hosting, and joining from inside the editor
     private void showCollabSetupDialog() {
         Stage dialogStage = new Stage();
         dialogStage.initOwner(primaryStage);
@@ -291,12 +302,13 @@ public class Main extends Application {
         joinBtn.setToggleGroup(group);
         offlineBtn.setSelected(true);
 
-        // ── updated placeholder to reflect localhost.run format ──
+        //placeholder shows the expected format
         TextField codeField = new TextField();
         codeField.setPromptText("Same network: 192.168.x.x   |   Different network: host:port");
         codeField.setDisable(true);
         codeField.setMaxWidth(380);
 
+        //only enable the code input when the join option is selected
         joinBtn.selectedProperty().addListener((obs, was, is) -> codeField.setDisable(!is));
 
         Button continueBtn = new Button("Continue");
@@ -318,6 +330,7 @@ public class Main extends Application {
             dialogStage.close();
 
             if (hostBtn.isSelected()) {
+                //start the embedded WebSocket server, connect to it ourselves, then show the room code
                 CollabServer.startServer();
                 collabServerHost = "localhost";
                 isHosting = true;
@@ -350,6 +363,7 @@ public class Main extends Application {
 
     private void connectToCollab(String host) {
         if (editor == null) return;
+        //update the title bar whenever the active user list changes
         editor.enableCollab(host, currentUsername, users -> {
             String userList = String.join(", ", users);
             Platform.runLater(() ->
@@ -367,6 +381,7 @@ public class Main extends Application {
         });
     }
 
+    //shows the room code and ngrok instructions to the host after starting a session
     private void showRoomCodeDialog(String roomCode) {
         Alert alert = new Alert(Alert.AlertType.INFORMATION);
         alert.initOwner(primaryStage);
@@ -403,6 +418,7 @@ public class Main extends Application {
         alert.showAndWait();
     }
 
+    //step-by-step ngrok setup guide for first-time hosts
     private void showNgrokSetupGuide() {
         Stage guide = new Stage();
         guide.initOwner(primaryStage);
@@ -474,7 +490,7 @@ public class Main extends Application {
         guide.showAndWait();
     }
 
-    // ── Stop hosting ──────────────────────────────────────────────
+    //stop hosting
 
     private void stopHosting() {
         if (!isHosting) return;
@@ -492,7 +508,7 @@ public class Main extends Application {
         info.showAndWait();
     }
 
-    // ── Disconnect (joiner) ───────────────────────────────────────
+    //disconnect as a joiner
 
     private void disconnectFromCollab() {
         if (editor != null) editor.disconnectCollab();
@@ -503,7 +519,6 @@ public class Main extends Application {
         primaryStage.setTitle("DocuBridge - " + currentUsername + " | " + currentFileName);
     }
 
-    // ─────────────────────────────────────────────────────────────
 
     private void newFile() {
         TextInputDialog dialog = new TextInputDialog("");
@@ -511,7 +526,7 @@ public class Main extends Application {
         dialog.setContentText("File name:"); dialog.setGraphic(null);
         dialog.showAndWait().ifPresent(name -> {
             if (!name.trim().isEmpty()) {
-                saveFile();
+                saveFile(); //save current file before switching
                 db.createFile(currentUserId, name.trim());
                 currentFileName = name.trim();
                 showEditor();
@@ -530,6 +545,7 @@ public class Main extends Application {
                 String newName = name.trim();
                 String content = editor != null ? editor.getContent() : "";
                 WordDocumentManager.createWordFile(newName, content);
+                //only create a new DB record if the name actually changed
                 if (!newName.equals(currentFileName)) db.createFile(currentUserId, newName);
                 db.saveFileContent(currentUserId, newName, content);
                 currentFileName = newName;
@@ -542,12 +558,14 @@ public class Main extends Application {
         if (editor != null && currentFileName != null && currentUserId != -1) {
             String content = editor.getContent();
             db.saveFileContent(currentUserId, currentFileName, content);
+            //always store with .docx extension on disk
             String fileName = currentFileName.endsWith(".docx") ? currentFileName : currentFileName + ".docx";
             WordDocumentManager.createWordFile(fileName, content);
             System.out.println("✓ Saved: " + fileName);
         }
     }
 
+    //auto-saves to DB and disk every 5 seconds; also syncs full content to the collab server if connected
     private void startAutoSave() {
         javafx.animation.Timeline timeline = new javafx.animation.Timeline(
                 new javafx.animation.KeyFrame(javafx.util.Duration.seconds(5), e -> {

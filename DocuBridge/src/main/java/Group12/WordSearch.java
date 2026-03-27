@@ -24,7 +24,9 @@ import java.util.function.BiConsumer;
 import java.util.function.Supplier;
 
 public class WordSearch {
+    //scriptExecute runs JS in the editor; the boolean flag controls whether it needs to be on the FX thread
     private final BiConsumer<String, Boolean> scriptExecute;
+    //textFetcher pulls the current plain-text content out of Quill so we can run regex against it
     private final Supplier<String> textFetcher;
     private final WebView webView;
 
@@ -34,10 +36,13 @@ public class WordSearch {
     private CheckBox regexBox;
     private Label countLabel;
 
+    //These track the last known state so the live search thread can detect changes
     private volatile String lastDocText = "";
     private volatile String lastSearch = "";
     private volatile boolean lastRegexState = false;
+    //currentIndex is AtomicInteger because it's read/written from both the search thread and the FX thread
     private final AtomicInteger currentIndex = new AtomicInteger(0);
+    //matchIndices holds [start, end] pairs for every match in the current document
     private final List<int[]> matchIndices = new ArrayList<>();
     private Thread searchThread;
     private volatile boolean stopThread = false;
@@ -50,6 +55,7 @@ public class WordSearch {
 
     public void showSearchPopup() {
         Platform.runLater(() -> {
+            //If the popup is already open just bring it to the front instead of creating a second one
             if (searchStage != null && searchStage.isShowing()) {
                 searchStage.requestFocus();
                 searchField.requestFocus();
@@ -85,6 +91,7 @@ public class WordSearch {
 
             // Stage Setup
             searchStage = new Stage();
+            //UTILITY style gives a smaller title bar without minimize/maximize buttons
             searchStage.initStyle(StageStyle.UTILITY);
             searchStage.setTitle("Find & Replace");
             searchStage.setAlwaysOnTop(true);
@@ -107,6 +114,7 @@ public class WordSearch {
             prevBtn.setOnAction(e -> prevMatch());
             replaceBtn.setOnAction(e -> replaceCurrentMatch());
             replaceAllBtn.setOnAction(e -> replaceAllMatches());
+            //Any time regex mode is toggled, redo the search immediately
             regexBox.setOnAction(e -> triggerSearch());
 
             searchField.setOnKeyPressed(e -> {
@@ -127,12 +135,14 @@ public class WordSearch {
 
     private void closePopup() {
         stopThread = true;
+        //Remove all yellow highlights before closing so the document looks normal again
         clearHighlight();
 
         if (searchStage != null) {
             searchStage.close();
         }
 
+        //Give focus back to the editor so the user can keep typing straight away
         Platform.runLater(() -> {
             webView.requestFocus();
             scriptExecute.accept("quill.focus();", false);
@@ -143,7 +153,7 @@ public class WordSearch {
         synchronized (matchIndices) {
             if (matchIndices.isEmpty()) return;
 
-            // Calculate the circular index
+            //Wrap around so Next on the last match goes back to the first, and vice versa
             idx = (idx + matchIndices.size()) % matchIndices.size();
             currentIndex.set(idx);
             int[] range = matchIndices.get(idx);
@@ -170,10 +180,12 @@ public class WordSearch {
         }
     }
 
+    //These are simple wrappers - the +1/-1 wrapping is handled inside highlightMatch
     private void nextMatch() { synchronized(matchIndices) { if(!matchIndices.isEmpty()) highlightMatch(currentIndex.get() + 1); } }
     private void prevMatch() { synchronized(matchIndices) { if(!matchIndices.isEmpty()) highlightMatch(currentIndex.get() - 1); } }
 
     private void clearHighlight() {
+        //Reset every character's background to false (i.e., no highlight) across the whole document
         scriptExecute.accept("quill.formatText(0, quill.getLength(), 'background', false, 'silent');", true);
     }
 
@@ -200,7 +212,8 @@ public class WordSearch {
         synchronized (matchIndices) {
             if (matchIndices.isEmpty()) return;
             String escaped = escapeForJs(replacement);
-            // Build one script replacing in reverse order so earlier indices stay valid
+            //Process replacements in reverse order so that earlier char indices stay valid
+            //as the document length changes with each substitution
             StringBuilder sb = new StringBuilder();
             for (int i = matchIndices.size() - 1; i >= 0; i--) {
                 int[] range = matchIndices.get(i);
@@ -218,6 +231,7 @@ public class WordSearch {
         });
     }
 
+    //Escape characters that would break the JS string literals we're building dynamically
     private static String escapeForJs(String text) {
         return text
             .replace("\\", "\\\\")
@@ -230,6 +244,7 @@ public class WordSearch {
     private void startLiveSearchThread() {
         stopThread = false;
         searchThread = new Thread(() -> {
+            //Poll every 400 ms and re-run the search if anything changed (text, query, or regex toggle)
             while (!stopThread) {
                 String docText = getDocumentTextSync();
                 String search = (searchField != null) ? searchField.getText() : "";
@@ -244,7 +259,7 @@ public class WordSearch {
                 try { Thread.sleep(400); } catch (InterruptedException e) { break; }
             }
         });
-        searchThread.setDaemon(true);
+        searchThread.setDaemon(true); //don't block JVM shutdown if the app closes with this thread running
         searchThread.start();
     }
 
@@ -261,6 +276,7 @@ public class WordSearch {
         }
 
         try {
+            //When not in regex mode, quote the search string so special characters are treated as literals
             Pattern pattern = isRegex ?
                     Pattern.compile(search, Pattern.CASE_INSENSITIVE) :
                     Pattern.compile(Pattern.quote(search), Pattern.CASE_INSENSITIVE);
@@ -281,12 +297,15 @@ public class WordSearch {
                 else clearHighlight();
             });
         } catch (Exception e) {
+            //An invalid regex pattern will throw - show feedback in the label instead of crashing
             Platform.runLater(() -> countLabel.setText("Invalid Regex"));
         }
     }
 
     private String getDocumentTextSync() {
+        //If we're already on the FX thread, call the supplier directly to avoid a deadlock
         if (Platform.isFxApplicationThread()) return textFetcher.get();
+        //Otherwise submit to the FX thread and block (with a timeout) so the background thread gets the result
         FutureTask<String> task = new FutureTask<>(textFetcher::get);
         Platform.runLater(task);
         try { return task.get(400, TimeUnit.MILLISECONDS); } catch (Exception e) { return ""; }

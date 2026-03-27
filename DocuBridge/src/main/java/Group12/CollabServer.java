@@ -43,13 +43,18 @@ public class CollabServer extends WebSocketServer {
 
     public static final int PORT = 8765;
 
+    //each document gets its own set of connected sockets (the "room")
     private final Map<String, Set<WebSocket>> documentRooms = Collections.synchronizedMap(new HashMap<>());
+    //last known full content per document - used to sync late joiners
     private final Map<String, String>         latestContent  = Collections.synchronizedMap(new HashMap<>());
+    //maps each connection to the username that joined on it
     private final Map<WebSocket, String>      usernames      = Collections.synchronizedMap(new HashMap<>());
+    //maps each connection to the document room it's in
     private final Map<WebSocket, String>      connToFile     = Collections.synchronizedMap(new HashMap<>());
 
     public CollabServer() {
         super(new InetSocketAddress(PORT));
+        //allow restarting the server quickly without waiting for the OS to release the port
         setReuseAddr(true);
     }
 
@@ -62,6 +67,7 @@ public class CollabServer extends WebSocketServer {
     public void onMessage(WebSocket conn, String message) {
         try {
             JSONObject msg = new JSONObject(message);
+            //route to the right handler based on the "type" field
             switch (msg.getString("type")) {
                 case "join"   -> handleJoin(conn, msg);
                 case "delta"  -> handleDelta(conn, msg);
@@ -85,18 +91,20 @@ public class CollabServer extends WebSocketServer {
             System.out.println("  → Redirected " + username + " from '" + requested + "' to '" + fileName + "'");
         }
 
+        //register the connection in all three lookup maps
         usernames.put(conn, username);
         connToFile.put(conn, fileName);
         documentRooms.computeIfAbsent(fileName, k -> Collections.synchronizedSet(new HashSet<>())).add(conn);
 
         System.out.println("✓ " + username + " joined: " + fileName);
 
-        // Always tell the client which room they actually joined
+        //tell the client which room they actually ended up in (may differ from what they requested)
         JSONObject ack = new JSONObject();
         ack.put("type",     "joined");
         ack.put("fileName", fileName);
         conn.send(ack.toString());
 
+        //if there's already content in this room, send it to the new joiner so they start in sync
         if (latestContent.containsKey(fileName)) {
             JSONObject syncMsg = new JSONObject();
             syncMsg.put("type",     "full");
@@ -107,15 +115,18 @@ public class CollabServer extends WebSocketServer {
             System.out.println("  → Sent current doc state to " + username);
         }
 
+        //update the user list shown to everyone in the room
         broadcastUserList(fileName);
     }
 
     private void handleDelta(WebSocket conn, JSONObject msg) {
         String fileName = msg.getString("fileName");
         String user = usernames.getOrDefault(conn, "unknown");
+        //stamp the sender's username onto the message before forwarding
         msg.put("username", user);
         System.out.println("DEBUG server: delta from " + user);
 
+        //forward the delta to everyone else in the room - not back to the sender
         Set<WebSocket> room = documentRooms.get(fileName);
         if (room != null) {
             synchronized (room) {
@@ -130,15 +141,18 @@ public class CollabServer extends WebSocketServer {
     }
 
     private void handleFull(WebSocket conn, JSONObject msg) {
+        //just store the latest full content snapshot - no need to broadcast, this is for syncing late joiners
         latestContent.put(msg.getString("fileName"), msg.getString("content"));
     }
 
     private void handleCursor(WebSocket conn, JSONObject msg) {
         String fileName = connToFile.get(conn);
         if (fileName == null) return;
+        //attach the username so receivers know whose cursor to render
         msg.put("username", usernames.getOrDefault(conn, "unknown"));
         Set<WebSocket> room = documentRooms.get(fileName);
         if (room == null) return;
+        //broadcast cursor position to everyone else in the room
         synchronized (room) {
             for (WebSocket client : room) {
                 if (client != conn && client.isOpen()) client.send(msg.toString());
@@ -148,6 +162,7 @@ public class CollabServer extends WebSocketServer {
 
     @Override
     public void onClose(WebSocket conn, int code, String reason, boolean remote) {
+        //clean up both lookup maps when a connection drops
         String username = usernames.remove(conn);
         String fileName = connToFile.remove(conn);
 
@@ -156,9 +171,11 @@ public class CollabServer extends WebSocketServer {
             if (room != null) {
                 room.remove(conn);
                 if (room.isEmpty()) {
+                    //no one left - drop the room entirely so it doesn't linger
                     documentRooms.remove(fileName);
                     System.out.println("Room closed (empty): " + fileName);
                 } else {
+                    //still people in the room - update their user list
                     broadcastUserList(fileName);
                 }
             }
@@ -183,6 +200,7 @@ public class CollabServer extends WebSocketServer {
         Set<WebSocket> room = documentRooms.get(fileName);
         if (room == null) return;
 
+        //build the list of display names from whoever's currently in the room
         JSONArray users = new JSONArray();
         synchronized (room) {
             for (WebSocket client : room) users.put(usernames.getOrDefault(client, "unknown"));
@@ -193,13 +211,15 @@ public class CollabServer extends WebSocketServer {
         listMsg.put("fileName", fileName);
         listMsg.put("users",    users);
 
+        //send to everyone - clients use this to render the "who's here" panel
         synchronized (room) {
             for (WebSocket client : room) { if (client.isOpen()) client.send(listMsg.toString()); }
         }
     }
 
-    // ── Room Code System ─────────────────────────────────────────────────────
+    //room code helpers
 
+    //maps room codes (e.g. "BRIDGE-4821") to the host IP they resolve to
     private static final Map<String, String> roomCodes = Collections.synchronizedMap(new HashMap<>());
 
     public static String generateRoomCode() {
@@ -225,13 +245,16 @@ public class CollabServer extends WebSocketServer {
      */
     public static String resolveHostFromCode(String input) {
         if (input == null || input.isBlank()) return null;
+        //check the room code registry first
         if (roomCodes.containsKey(input)) return roomCodes.get(input);
+        //if it looks like an IP or host:port, pass it through directly
         if (input.contains(".") || input.contains(":")) return input;
         return null;
     }
 
-    // ── Static launcher ──────────────────────────────────────────────────────
+    //entry point for running the server standalone
 
+    //singleton - only one server instance should ever be running at a time
     private static CollabServer instance;
 
     public static void startServer() {
@@ -244,6 +267,7 @@ public class CollabServer extends WebSocketServer {
     public static void stopServer() {
         if (instance == null) return;
         try {
+            //1000ms timeout gives in-flight messages a chance to finish
             instance.stop(1000);
             System.out.println("✓ CollabServer stopped.");
         } catch (InterruptedException e) {
@@ -258,6 +282,7 @@ public class CollabServer extends WebSocketServer {
         CollabServer server = new CollabServer();
         server.start();
         System.out.println("Press Ctrl+C to stop.");
+        //park the main thread so the server keeps running until killed
         Thread.currentThread().join();
     }
 }

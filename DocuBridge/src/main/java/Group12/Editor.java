@@ -32,6 +32,7 @@ import java.util.Base64;
 public class Editor {
     private String name;
     private WebView webView;
+    //named "quill" but this is actually just the JavaFX WebEngine - the real Quill object lives in JS
     private WebEngine quill;
     private BorderPane mainLayout;
     private Toolbar toolBar;
@@ -45,9 +46,12 @@ public class Editor {
     private CollabClient collabClient;
     private String serverHost;
     private String username;
+    //guard so we don't register the JS bridge listener more than once
     private boolean bridgeAttached = false;
+    //cached last-sent cursor so we only push changes, not every poll tick
     private int lastSentCursorIndex  = -2;
     private int lastSentCursorLength = 0;
+    //track what we last translated so we can skip redundant API calls
     private String  lastTranslatedText    = null;  // plain text of last translated content (live typing)
     private int     lastTranslatedVersion = -1;   // _translationVersion at last translation (formatting)
     private boolean translating           = false; // true while an async translation is in-flight
@@ -60,13 +64,16 @@ public class Editor {
         webView = new WebView();
         quill = webView.getEngine();
         String quillJsPath = getClass().getResource("/quill/editor.html").toExternalForm();
-        // Never let a link spawn a popup WebView window inside the app.
+        //Never let a link spawn a popup WebView window inside the app.
         quill.setCreatePopupHandler(config -> null);
 
         quill.getLoadWorker().stateProperty().addListener((obs, old, newState) -> {
             if (newState == javafx.concurrent.Worker.State.SUCCEEDED) {
+                //page finished loading - start polling until Quill's JS object is ready
                 waitForQuillReady();
             } else if (newState == javafx.concurrent.Worker.State.SCHEDULED) {
+                //intercept any navigation: if the engine is trying to load an http/https URL,
+                //cancel it and open it in the OS browser instead
                 String loc = quill.getLocation();
                 if (loc != null && (loc.startsWith("http://") || loc.startsWith("https://"))) {
                     Platform.runLater(() -> quill.getLoadWorker().cancel());
@@ -76,10 +83,12 @@ public class Editor {
         });
         quill.load(quillJsPath);
         webView.setPrefHeight(800);
+        //cap width to letter-page width (8.5 inches * screen DPI)
         webView.setMaxWidth(8.5 * dpi);
         webView.setMinHeight(600);
     }
 
+    //Quill initializes asynchronously, so poll every 100ms until window.quill exists
     private void waitForQuillReady() {
         PauseTransition pause = new PauseTransition(Duration.millis(100));
         pause.setOnFinished(event -> {
@@ -89,6 +98,7 @@ public class Editor {
                 clipboardHandler = new ClipboardHandler(webView);
                 initializeShortcuts();
 
+                //flag on window so JS side can check whether the bridge is up
                 JSObject win = (JSObject) quill.executeScript("window");
                 win.setMember("collabBridgeReady", true);
 
@@ -102,6 +112,8 @@ public class Editor {
         pause.play();
     }
 
+    //we can only attach the JS bridge once the WebSocket connection is open,
+    //so keep retrying every 200ms until collabClient reports it's ready
     private void scheduleAttachBridge() {
         if (bridgeAttached) return;
 
@@ -129,6 +141,8 @@ public class Editor {
         editorWrapper.getChildren().add(webView);
         editorWrapper.setFillWidth(false);
 
+        //clicking outside the WebView won't give it keyboard focus automatically,
+        //so forward mouse presses to the WebView and focus Quill via JS
         editorWrapper.addEventFilter(MouseEvent.MOUSE_PRESSED, e -> {
             if (!webView.isFocused()) {
                 webView.requestFocus();
@@ -145,6 +159,8 @@ public class Editor {
         mainLayout.setPadding(Insets.EMPTY);
     }
 
+    //WebView sometimes doesn't repaint after programmatic content changes,
+    //so we nudge opacity and width by a tiny amount to force a render pass
     private void forceRepaint() {
         final double savedScrollY = currentScrollY();
         PauseTransition delay = new PauseTransition(Duration.millis(50));
@@ -163,6 +179,7 @@ public class Editor {
         delay.play();
     }
 
+    //read current scroll position so forceRepaint can restore it after the nudge
     private double currentScrollY() {
         try {
             Object scrollVal = quill.executeScript("window.scrollY || document.documentElement.scrollTop || document.body.scrollTop || 0");
@@ -178,6 +195,7 @@ public class Editor {
         this.translationManager = translationManager;
         System.out.println("DEBUG: Editor created with translationManager=" + (translationManager != null ? "yes" : "null"));
         dpi = readDPI();
+        //Toolbar gets its actions as lambdas grouped by signature - no direct reference back to Editor
         toolBar = new Toolbar(
                 giveFunctionsNoParams(saveAs, save, newFile, openFile, showCollabDialog, stopHosting, disconnectCollab),
                 giveFunctionsWithParams(),
@@ -196,6 +214,7 @@ public class Editor {
         collabClient = CollabClient.create(serverHost, username, name, quill);
         if (onUsersChanged != null) collabClient.setOnUsersChanged(onUsersChanged);
 
+        //connectBlocking() is a blocking call so run it off the FX thread
         new Thread(() -> {
             try {
                 System.out.println("DEBUG: Connecting to collab server...");
@@ -211,6 +230,8 @@ public class Editor {
         }, "collab-connect").start();
     }
 
+    //registers a Quill 'text-change' listener in JS that queues user-typed deltas
+    //into a hidden <input id="deltaComm"> element, which the Java side polls and drains
     private void attachJsBridge() {
         bridgeAttached        = true;
         lastTranslatedText    = null;
@@ -222,7 +243,9 @@ public class Editor {
                 "(function(){" +
                         "  if (typeof quill === 'undefined') return 'quill_not_found';" +
                         "  quill.on('text-change', function(delta, oldDelta, source) {" +
+                        //encode source + a counter in document.title - cheap way to observe events during debugging
                         "    document.title = 'TC:' + source + ':' + (window._tcFromJava = (window._tcFromJava||0)+1);" +
+                        //only queue changes the user made; API changes (e.g. translation) are skipped
                         "    if (source !== 'user') return;" +
                         "    var el = document.getElementById('deltaComm');" +
                         "    if (!el) return;" +
@@ -240,9 +263,9 @@ public class Editor {
     }
 
     private void startTranslationPoller() {
-        // Hybrid detection: plain-text comparison catches live typing reliably;
-        // _translationVersion catches formatting-only changes (header, align, list)
-        // that don't alter the plain text.
+        //Hybrid detection: plain-text comparison catches live typing reliably;
+        //_translationVersion catches formatting-only changes (header, align, list)
+        //that don't alter the plain text.
         final String[] stableText    = {null};
         final int[]    stableVersion = {-1};
         final long[]   lastChangeMs  = {0};
@@ -265,15 +288,16 @@ public class Editor {
                 boolean versionChanged = currentVersion != stableVersion[0];
 
                 if (textChanged || versionChanged) {
-                    // Something changed - reset debounce timer
+                    //Something changed - reset debounce timer
                     stableText[0]    = currentText;
                     stableVersion[0] = currentVersion;
                     lastChangeMs[0]  = now;
                 } else {
-                    // Stable - check if we need to (re)translate
+                    //Stable - check if we need to (re)translate
                     boolean needsTranslation =
                             !currentText.equals(lastTranslatedText) ||
                             currentVersion != lastTranslatedVersion;
+                    //only fire once the user has stopped typing for 1 second and no translation is running
                     if (needsTranslation && (now - lastChangeMs[0]) >= 1000 && !translating) {
                         translating = true;
                         final String snapText    = currentText;
@@ -317,14 +341,14 @@ public class Editor {
             "  var dOps = quill.getContents().ops;" +
             "  var oData = JSON.parse(window._originalDelta);" +
             "  var oOps  = oData.ops || [];" +
-            // Collect paragraph-level attrs from every standalone \\n in the display
+            //Collect paragraph-level attrs from every standalone \\n in the display
             "  var pa = [];" +
             "  for (var i = 0; i < dOps.length; i++) {" +
             "    var op = dOps[i];" +
             "    if (typeof op.insert === 'string' && op.insert === '\\n')" +
             "      pa.push(op.attributes ? JSON.parse(JSON.stringify(op.attributes)) : null);" +
             "  }" +
-            // Apply those attrs to the matching \\n ops in _originalDelta by index
+            //Apply those attrs to the matching \\n ops in _originalDelta by index
             "  var pi = 0;" +
             "  for (var i = 0; i < oOps.length; i++) {" +
             "    if (typeof oOps[i].insert === 'string' && oOps[i].insert === '\\n') {" +
@@ -348,12 +372,15 @@ public class Editor {
         win.setMember("_pendingTranslatedDelta", translatedDelta);
         quill.executeScript(
             "(function(){" +
+            //first call: snapshot the current (original-language) content before overwriting it
             "  if (!window._originalDelta) window._originalDelta = JSON.stringify(quill.getContents());" +
             "  var savedSel = quill.getSelection();" +
+            //flag prevents the text-change listener from re-queueing this as a user delta
             "  window._applyingTranslation = true;" +
             "  try { quill.setContents(JSON.parse(window._pendingTranslatedDelta), 'api'); } catch(e){}" +
             "  window._applyingTranslation = false;" +
             "  window._pendingTranslatedDelta = null;" +
+            //clamp cursor to the new document length in case translated text is shorter
             "  var newLen = Math.max(0, quill.getLength() - 1);" +
             "  if (savedSel) { quill.setSelection(Math.min(savedSel.index, newLen), 0); }" +
             "  else { quill.setSelection(newLen, 0); }" +
@@ -361,6 +388,7 @@ public class Editor {
         );
     }
 
+    //poll Quill's selection every 100ms and only send a cursor update when it actually changes
     private void startCursorPoller() {
         lastSentCursorIndex  = -2;
         lastSentCursorLength = 0;
@@ -368,6 +396,7 @@ public class Editor {
         poll.setOnFinished(e -> {
             if (!bridgeAttached || collabClient == null) return;
             try {
+                //serialize index+length as a comma-separated string to avoid JSObject overhead
                 Object raw = quill.executeScript(
                         "(function(){" +
                                 "  var s = quill.getSelection();" +
@@ -394,6 +423,8 @@ public class Editor {
 
     private int pollCounter = 0;
 
+    //drain the deltaComm queue every 150ms and forward each delta to the collab server;
+    //also compose deltas into _originalDelta so the translation poller sees fresh content
     private void startDeltaPoller() {
         pollCounter = 0;
         System.out.println("DEBUG: startDeltaPoller started");
@@ -407,6 +438,7 @@ public class Editor {
                 if (pollCounter++ % 50 == 0) {
                     System.out.println("DEBUG: Delta poller heartbeat #" + pollCounter);
                 }
+                //read and atomically clear the queue in a single JS round-trip
                 String arrJson = (String) quill.executeScript(
                         "(function(){ var el=document.getElementById('deltaComm'); if(!el) return '[]'; var v=el.value||'[]'; el.value='[]'; return v; })()"
                 );
@@ -416,8 +448,8 @@ public class Editor {
                     for (int i = 0; i < arr.length(); i++) {
                         collabClient.sendDelta(arr.getString(i));
                     }
-                    // While translation is ON, compose each user-typed delta into _originalDelta
-                    // so the poller retranslates up-to-date content instead of overwriting new typing.
+                    //While translation is ON, compose each user-typed delta into _originalDelta
+                    //so the poller retranslates up-to-date content instead of overwriting new typing.
                     if (translationManager != null && translationManager.isTranslationEnabled()) {
                         for (int i = 0; i < arr.length(); i++) {
                             JSObject win = (JSObject) quill.executeScript("window");
@@ -435,8 +467,8 @@ public class Editor {
                                 "})()"
                             );
                         }
-                        // No need to reset lastTranslatedVersion - _translationVersion already
-                        // incremented when the user typed, so the poller will detect the change.
+                        //No need to reset lastTranslatedVersion - _translationVersion already
+                        //incremented when the user typed, so the poller will detect the change.
                     }
                 }
             } catch (Exception ex) {
@@ -450,6 +482,7 @@ public class Editor {
 
     public void disconnectCollab() {
         System.out.println("DEBUG: disconnectCollab called");
+        //stop all pollers by clearing bridgeAttached before closing the socket
         bridgeAttached        = false;
         lastSentCursorIndex   = -2;
         lastSentCursorLength  = 0;
@@ -479,6 +512,7 @@ public class Editor {
     }
 
     private void undo() {
+        //cutoff() commits the current change to history before undoing, matching word-processor behaviour
         Platform.runLater(() -> quill.executeScript("quill.history.cutoff(); quill.history.undo();"));
     }
 
@@ -486,6 +520,7 @@ public class Editor {
         Platform.runLater(() -> quill.executeScript("quill.history.cutoff(); quill.history.redo();"));
     }
 
+    //font size in Quill is stored in px; UI shows pt, so we convert back and forth
     private void fontSizeShortcut(String operand, String source) {
         Platform.runLater(() -> {
             quill.executeScript("quill.focus();" +
@@ -501,12 +536,14 @@ public class Editor {
                     "if (newPtSize > 92) newPtSize = 92;" +
                     "var newSize = Math.round(newPtSize * 1.333) + 'px';" +
                     "quill.format('size', newSize, '" + source + "');" +
+                    //short timeout gives Quill a tick to update its internal state before we restore selection
                     "setTimeout(function() { quill.update(); var endIndex = selectionIndex + selectionLength; quill.setSelection(endIndex, 0); }, 10);"
             );
             forceRepaint();
         });
     }
 
+    //toggle superscript/subscript: if it's already applied remove it, otherwise apply it
     private void applyScript(String scriptType, String source) {
         Platform.runLater(() -> {
             webView.requestFocus();
@@ -519,6 +556,7 @@ public class Editor {
         });
     }
 
+    //generic toggle for bold/italic/underline - reads current value and flips it
     private void format(String type, String source) {
         Platform.runLater(() -> {
             quill.executeScript("(function(){" +
@@ -534,6 +572,7 @@ public class Editor {
         });
     }
 
+    //if selected text already has a link, Ctrl+K removes it; otherwise prompt for URL
     private void applyLink(String source) {
         webView.requestFocus();
         JSObject selection = (JSObject) quill.executeScript("quill.getSelection(true)");
@@ -570,6 +609,7 @@ public class Editor {
         });
     }
 
+    //try Desktop.browse first; fall back to OS-specific CLI commands if it's not available
     private void openInBrowser(String url) {
         try {
             if (Desktop.isDesktopSupported() && Desktop.getDesktop().isSupported(Desktop.Action.BROWSE)) {
@@ -579,7 +619,7 @@ public class Editor {
         } catch (Exception ex) {
             System.err.println("Desktop.browse failed: " + ex.getMessage());
         }
-        // Fallback for environments where Desktop.browse is unavailable (e.g. some Linux setups)
+        //Fallback for environments where Desktop.browse is unavailable (e.g. some Linux setups)
         try {
             String os = System.getProperty("os.name").toLowerCase();
             String[] cmd;
@@ -609,6 +649,7 @@ public class Editor {
     }
 
     private void setTextHighlight(String colour, String source) {
+        //passing false (not a quoted string) removes the highlight entirely
         String val = (colour == null || colour.isEmpty()) ? "false" : "'" + colour + "'";
         Platform.runLater(() -> { webView.requestFocus(); quill.executeScript("quill.focus(); quill.format('background'," + val + ",'" + source + "');"); forceRepaint(); });
     }
@@ -616,12 +657,14 @@ public class Editor {
     private void setHeader(String level, String source) {
         Platform.runLater(() -> {
             webView.requestFocus();
+            //"none" means remove heading - Quill uses false to clear a format
             String headerValue = level.equals("none") ? "false" : level;
             quill.executeScript("quill.focus(); quill.format('header'," + headerValue + ",'" + source + "');");
             forceRepaint();
         });
     }
 
+    //reads the file, converts to base64 data URI, then inserts as an embed at the cursor position
     private void insertImage(String imageType, String source) {
         Platform.runLater(() -> {
             webView.requestFocus();
@@ -646,6 +689,7 @@ public class Editor {
                     JSObject selection = (JSObject) quill.executeScript("quill.getSelection(true)");
                     int index = 0;
                     if (selection != null) { Number n = (Number) selection.getMember("index"); if (n != null) index = n.intValue(); }
+                    //insert the embed, then add a trailing newline and move cursor past it
                     quill.executeScript("quill.focus(); quill.insertEmbed(" + index + ", 'image', '" + dataUri.replace("'", "\\'") + "', '" + source + "'); quill.insertText(" + (index + 1) + ", '\\n', '" + source + "'); quill.setSelection(" + (index + 2) + ", 0);");
                     forceRepaint();
                 } catch (IOException e) { e.printStackTrace(); }
@@ -653,6 +697,7 @@ public class Editor {
         });
     }
 
+    //toggles list on the current line or selection; same format value means remove it
     private void insertList(String listType, String source) {
         Platform.runLater(() -> {
             webView.requestFocus();
@@ -669,6 +714,7 @@ public class Editor {
         });
     }
 
+    //used by the Toolbar to read current cursor formatting and update UI state (bold button active, etc.)
     private JSObject getFormats() {
         try {
             Boolean quillExists = (Boolean) quill.executeScript("typeof quill !== 'undefined' && quill !== null");
@@ -686,7 +732,7 @@ public class Editor {
         if ("disable".equals(action)) {
             translationManager.disableTranslation();
             lastTranslatedVersion = -1;
-            // Restore the English original if we have it stored
+            //Restore the English original if we have it stored
             try {
                 quill.executeScript(
                     "(function(){" +
@@ -708,10 +754,11 @@ public class Editor {
         }
     }
 
+    //called when the user explicitly switches language mid-session, so we retranslate immediately
     private void retranslate(String langCode, String source) {
         if (translationManager == null || !isCollabConnected() || translating) return;
 
-        // Always translate from the English original - never from an already-translated doc
+        //Always translate from the English original - never from an already-translated doc
         String deltaJson = (String) quill.executeScript(
             "(function(){ return window._originalDelta || JSON.stringify(quill.getContents()); })()");
         if (deltaJson == null) return;
@@ -754,12 +801,16 @@ public class Editor {
                     case X -> { event.consume(); clipboardHandler.handleCut(); }
                     case V -> { event.consume(); clipboardHandler.handlePaste(); }
                     case F -> { event.consume(); showSearch(); }
+                    //Ctrl+Shift++ / Ctrl+Shift+- to bump font size up/down
                     case EQUALS -> { event.consume(); if (event.isShiftDown()) fontSizeShortcut("+", "user"); }
                     case MINUS  -> { event.consume(); if (event.isShiftDown()) fontSizeShortcut("-", "user"); }
+                    //Ctrl+Backspace: delete the whole word to the left of cursor
                     case BACK_SPACE -> { event.consume(); Platform.runLater(() -> quill.executeScript("(function(){ var sel = quill.getSelection(); if (!sel) return; var idx = sel.index; if (sel.length > 0) { quill.deleteText(idx, sel.length, 'user'); return; } if (idx === 0) return; var text = quill.getText(0, idx); var i = idx; while (i > 0 && text[i-1] === ' ') i--; while (i > 0 && text[i-1] !== ' ' && text[i-1] !== '\\n') i--; quill.deleteText(i, idx - i, 'user'); })()")); }
+                    //Ctrl+Delete: delete the whole word to the right of cursor
                     case DELETE -> { event.consume(); Platform.runLater(() -> quill.executeScript("(function(){ var sel = quill.getSelection(); if (!sel) return; var idx = sel.index; if (sel.length > 0) { quill.deleteText(idx, sel.length, 'user'); return; } var total = quill.getLength(); if (idx >= total - 1) return; var text = quill.getText(idx, total - idx); var i = 0; while (i < text.length - 1 && text[i] === ' ') i++; while (i < text.length - 1 && text[i] !== ' ' && text[i] !== '\\n') i++; if (i === 0) i = 1; quill.deleteText(idx, i, 'user'); })()")); }
                 }
             } else if (event.isShiftDown() && event.getCode() == KeyCode.ENTER) {
+                //Shift+Enter inserts a soft line break (\n without starting a new paragraph block)
                 event.consume();
                 Platform.runLater(() -> {
                     JSObject sel = (JSObject) quill.executeScript("quill.getSelection(true)");
@@ -774,6 +825,8 @@ public class Editor {
         });
     }
 
+    //when the cursor is at the start of a list item and the user presses Backspace,
+    //remove the list formatting instead of deleting into the previous line
     private void handleBackspaceInList() {
         Platform.runLater(() -> {
             quill.executeScript("(function(){ var sel = quill.getSelection(); if (!sel || sel.length > 0) return; var idx = sel.index; var fmt = quill.getFormat(idx, 1); var isList = fmt.list && (fmt.list === 'bullet' || fmt.list === 'ordered' || fmt.list === 'unordered'); if (!isList) return; if (idx === 0) { quill.formatLine(idx, 1, 'list', false); return; } var charBefore = quill.getText(idx - 1, 1); if (charBefore === '\\n') { quill.formatLine(idx, 1, 'list', false); } })();");
@@ -786,6 +839,8 @@ public class Editor {
     public double getDPI()                             { return dpi; }
     public ClipboardHandler getClipboardHandler()      { return clipboardHandler; }
 
+    //these three methods build the action maps that get passed to Toolbar at construction time;
+    //Toolbar never holds a reference to Editor, just the lambdas it needs
     private HashMap<String, BiConsumer<String, String>> giveFunctionsWithParams() {
         HashMap<String, BiConsumer<String, String>> temp = new HashMap<>();
         temp.put("format",           this::format);
@@ -839,10 +894,12 @@ public class Editor {
         wordSearch.showSearchPopup();
     }
 
+    //thin wrapper so WordSearch can execute arbitrary JS without a direct reference to WebEngine
     private void quillExecute(String script, Boolean repaint) {
         Platform.runLater(() -> { quill.executeScript(script); if (repaint) forceRepaint(); });
     }
 
+    //handles both delta JSON (from save files) and plain text; retries until Quill is ready
     public void loadContent(String content) {
         if (content == null || content.isEmpty()) content = "";
         final String finalContent = content;
@@ -852,9 +909,11 @@ public class Editor {
             if (Boolean.TRUE.equals(quillReady)) {
                 Platform.runLater(() -> {
                     if (finalContent.trim().startsWith("{")) {
+                        //looks like a delta JSON object - use setContents
                         String escaped = finalContent.replace("\\", "\\\\").replace("\"", "\\\"").replace("\r", "\\r").replace("\n", "\\n");
                         quill.executeScript("quill.setContents(JSON.parse(\"" + escaped + "\"))");
                     } else {
+                        //plain text fallback
                         String escaped = finalContent.replace("\\", "\\\\").replace("\"", "\\\"").replace("\n", "\\n");
                         quill.executeScript("quill.setText(\"" + escaped + "\")");
                     }
@@ -867,8 +926,8 @@ public class Editor {
     }
 
     public String getContent() {
-        // If translation is active, always save/send the original-language content,
-        // not the translated view - so reopening the file shows the author's language.
+        //If translation is active, always save/send the original-language content,
+        //not the translated view - so reopening the file shows the author's language.
         Object result = quill.executeScript(
             "(function(){ return window._originalDelta || JSON.stringify(quill.getContents()); })()");
         return result != null ? result.toString() : "";

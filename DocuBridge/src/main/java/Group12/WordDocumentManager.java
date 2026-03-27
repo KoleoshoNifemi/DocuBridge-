@@ -15,18 +15,22 @@ public class WordDocumentManager {
 
     public static void createWordFile(String fileName, String content) {
         try (XWPFDocument document = new XWPFDocument()) {
+            //Quill exports content as a Delta JSON object; check for that before treating it as plain text
             if (content != null && content.trim().startsWith("{")) {
                 buildDocumentFromDelta(document, content);
             } else {
+                //Plain text fallback - just dump everything into one run
                 XWPFParagraph paragraph = document.createParagraph();
                 XWPFRun run = paragraph.createRun();
                 run.setText(content != null ? content : "");
             }
 
+            //Save to ~/Documents/DocuBridge/, creating the folder if it doesn't exist
             String documentsFolder = System.getProperty("user.home") + java.io.File.separator + "Documents";
             String docuBridgeFolder = documentsFolder + java.io.File.separator + "DocuBridge";
             new java.io.File(docuBridgeFolder).mkdirs();
 
+            //Ensure the file always gets the .docx extension
             String fileName_final = fileName.endsWith(".docx") ? fileName : fileName + ".docx";
             String filePath = docuBridgeFolder + java.io.File.separator + fileName_final;
 
@@ -44,12 +48,15 @@ public class WordDocumentManager {
             JSONObject json = new JSONObject(deltaJson);
             JSONArray ops = json.getJSONArray("ops");
 
+            //Start with one blank paragraph; we'll keep reusing/extending it until we hit a \n
             XWPFParagraph currentParagraph = document.createParagraph();
+            //These are lazily created the first time we encounter each list type in the document
             BigInteger bulletNumId  = null;
             BigInteger orderedNumId = null;
 
             for (int i = 0; i < ops.length(); i++) {
                 JSONObject op = ops.getJSONObject(i);
+                //Only "insert" ops matter here; skip retain/delete
                 if (!op.has("insert")) continue;
 
                 Object insertVal = op.get("insert");
@@ -64,6 +71,8 @@ public class WordDocumentManager {
 
                 if (!(insertVal instanceof String)) continue;
 
+                //Split on \n because in Quill's Delta format, a newline carries the paragraph-level
+                //attributes (alignment, list type, header) for the paragraph that just ended
                 String text = (String) insertVal;
                 String[] parts = text.split("\n", -1);
 
@@ -75,13 +84,14 @@ public class WordDocumentManager {
                     }
 
                     if (p < parts.length - 1) {
-                        // The \n op's attrs carry paragraph-level formatting
+                        //We just crossed a \n - apply paragraph-level formatting to the paragraph we finished
                         applyParagraphFormatting(currentParagraph, attrs);
 
                         if (attrs != null) {
                             // Lists
                             String listType = attrs.optString("list", null);
                             if ("bullet".equals(listType)) {
+                                //Reuse the same numId for all bullets so they belong to one list
                                 if (bulletNumId == null) bulletNumId = createBulletList(document);
                                 currentParagraph.setNumID(bulletNumId);
                                 currentParagraph.setNumILvl(BigInteger.ZERO);
@@ -95,6 +105,7 @@ public class WordDocumentManager {
                             Object headerVal = attrs.opt("header");
                             if (headerVal != null) {
                                 String hStr = headerVal.toString();
+                                //"false" and "null" show up when the attribute is explicitly cleared in Quill
                                 if (!hStr.isEmpty() && !hStr.equals("null") && !hStr.equals("false")) {
                                     try {
                                         int level = Integer.parseInt(hStr);
@@ -105,6 +116,7 @@ public class WordDocumentManager {
                             }
                         }
 
+                        //Move on to the next paragraph for the content that follows
                         currentParagraph = document.createParagraph();
                     }
                 }
@@ -117,16 +129,18 @@ public class WordDocumentManager {
     private static void applyRunFormatting(XWPFRun run, JSONObject attrs) {
         if (attrs == null) return;
 
-        // ── Standard formatting ────────────────────────────────────────────
+        //standard character formatting
         if (attrs.optBoolean("bold",      false)) run.setBold(true);
         if (attrs.optBoolean("italic",    false)) run.setItalic(true);
         if (attrs.optBoolean("underline", false)) run.setUnderline(UnderlinePatterns.SINGLE);
         if (attrs.optBoolean("strike",    false)) run.setStrikeThrough(true);
 
+        //Quill colors come in as "#rrggbb"; POI wants them without the leading #
         String color = attrs.optString("color", null);
         if (color != null && color.startsWith("#"))
             run.setColor(color.substring(1));
 
+        //Quill stores font size as CSS pixels (e.g. "16px"); convert to points for Word
         String size = attrs.optString("size", null);
         if (size != null && size.endsWith("px")) {
             try {
@@ -139,8 +153,7 @@ public class WordDocumentManager {
         if (font != null && !font.isEmpty() && !font.equals("null"))
             run.setFontFamily(getFontName(font));
 
-        // ── Subscript / Superscript ────────────────────────────────────────
-        // Must use raw CTRPr - XWPFRun has no public sub/super API
+        //subscript / superscript - must use raw CTRPr, XWPFRun has no public API for this
         String script = attrs.optString("script", null);
         if ("sub".equals(script) || "super".equals(script)) {
             CTRPr rPr = run.getCTR().isSetRPr() ? run.getCTR().getRPr() : run.getCTR().addNewRPr();
@@ -149,7 +162,7 @@ public class WordDocumentManager {
             );
         }
 
-        // ── Text highlight (background color) ─────────────────────────────
+        //Word uses shading (CTShd) to represent background highlight, not a dedicated highlight element
         String bg = attrs.optString("background", null);
         if (bg != null && !bg.isEmpty() && !bg.equals("false")) {
             String hex = colorToHex(bg);
@@ -167,6 +180,7 @@ public class WordDocumentManager {
         if (attrs == null) return;
         String align = attrs.optString("align", null);
         if (align != null) {
+            //"justify" maps to BOTH in OOXML terminology
             switch (align) {
                 case "center":  paragraph.setAlignment(ParagraphAlignment.CENTER); break;
                 case "right":   paragraph.setAlignment(ParagraphAlignment.RIGHT);  break;
@@ -176,9 +190,10 @@ public class WordDocumentManager {
         }
     }
 
-    // ── List numbering helpers ─────────────────────────────────────────────
+    //list numbering helpers
 
     private static BigInteger createBulletList(XWPFDocument document) {
+        //Build an abstract numbering definition for a single-level bullet list, then register it
         CTAbstractNum ctAbstractNum = CTAbstractNum.Factory.newInstance();
         CTLvl lvl = ctAbstractNum.addNewLvl();
         lvl.setIlvl(BigInteger.ZERO);
@@ -193,6 +208,7 @@ public class WordDocumentManager {
     }
 
     private static BigInteger createOrderedList(XWPFDocument document) {
+        //Same structure as bullet but uses DECIMAL format and "%1." as the level text pattern
         CTAbstractNum ctAbstractNum = CTAbstractNum.Factory.newInstance();
         CTLvl lvl = ctAbstractNum.addNewLvl();
         lvl.setIlvl(BigInteger.ZERO);
@@ -206,15 +222,17 @@ public class WordDocumentManager {
         return numbering.addNum(numbering.addAbstractNum(new XWPFAbstractNum(ctAbstractNum)));
     }
 
-    // ── Image helper ───────────────────────────────────────────────────────
+    //image helper
 
     private static void insertImage(XWPFDocument document, XWPFParagraph paragraph, String dataUri) {
         try {
+            //Data URIs are "data:<mime>;base64,<data>" - split at the comma to separate header from payload
             int comma = dataUri.indexOf(',');
             if (comma < 0) return;
             String header  = dataUri.substring(0, comma);
             byte[] imgData = java.util.Base64.getDecoder().decode(dataUri.substring(comma + 1).trim());
 
+            //Default to PNG; switch based on what the MIME header says
             int picType = XWPFDocument.PICTURE_TYPE_PNG;
             if (header.contains("jpeg") || header.contains("jpg")) picType = XWPFDocument.PICTURE_TYPE_JPEG;
             else if (header.contains("gif"))                        picType = XWPFDocument.PICTURE_TYPE_GIF;
@@ -246,12 +264,14 @@ public class WordDocumentManager {
         }
     }
 
-    // ── Colour helpers ─────────────────────────────────────────────────────
+    //colour helpers
 
-    /** Returns uppercase hex (no #) for a CSS hex or named colour, or null if unknown. */
+    //returns uppercase hex (no #) for a CSS hex or named colour, or null if unknown
     private static String colorToHex(String color) {
         if (color == null) return null;
+        //Already a hex value, just strip the # and normalise case
         if (color.startsWith("#")) return color.substring(1).toUpperCase();
+        //Map the CSS named colors that Quill commonly uses; anything else we can't handle
         switch (color.toLowerCase()) {
             case "yellow":  return "FFFF00";
             case "lime":    return "00FF00";
@@ -272,6 +292,7 @@ public class WordDocumentManager {
         }
     }
 
+    //Quill stores font names in a normalised form (e.g. "courier-new"); map them back to proper names
     private static String getFontName(String quillFont) {
         switch (quillFont.toLowerCase().replace("-", " ")) {
             case "arial":           return "Arial";
@@ -282,12 +303,13 @@ public class WordDocumentManager {
         }
     }
 
-    // ── Read ───────────────────────────────────────────────────────────────
+    //read
 
     public static String readWordFile(String fileName) {
         try (FileInputStream fis = new FileInputStream(fileName);
              XWPFDocument document = new XWPFDocument(fis)) {
             StringBuilder content = new StringBuilder();
+            //Iterate paragraphs and join with newlines - formatting is discarded, plain text only
             for (XWPFParagraph paragraph : document.getParagraphs()) {
                 content.append(paragraph.getText()).append("\n");
             }

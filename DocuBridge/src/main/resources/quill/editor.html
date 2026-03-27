@@ -3,6 +3,10 @@
 <head>
     <meta charset="utf-8">
     <title>Quill Editor</title>
+
+    <!-- Disable WebKit's auto-scroll-to-caret behavior before anything else loads.
+         JavaFX WebView fires these natively whenever focus/selection changes, which
+         causes jarring viewport jumps that we can't suppress from Java. -->
     <script>
         // Disable native scroll commands that can force jump-to-caret in WebView/WebKit
         Element.prototype.scrollIntoView = function() {};
@@ -11,11 +15,14 @@
         window.scroll = function() {};
         window.scrollBy = function() {};
     </script>
+
+    <!-- Stub out the highlight API so callers don't have to null-check before Quill is ready -->
     <script>
         window.api = window.api || {};
         window.api.highlight = window.api.highlight || function() {};
         window.api.clearHighlight = window.api.clearHighlight || function() {};
     </script>
+
     <script src="quill.js"></script>
     <script src="image-tools.js"></script>
 
@@ -72,6 +79,9 @@
             line-height: 1.5;
         }
 
+        /* Quill renders both bullets and ordered items inside <ol> using data-list
+           attributes instead of separate <ul>/<ol> tags, so we have to drive the
+           counter and bullet glyph entirely through CSS. */
         .ql-editor ol {
             list-style-type: none;
             padding-left: 2em;
@@ -124,6 +134,8 @@
             cursor: pointer;
         }
 
+        /* Hide the browser selection highlight when the editor loses focus -
+           avoids stale blue highlighting when the user clicks the JavaFX toolbar */
         .ql-editor:not(:focus) ::selection {
             background: transparent;
         }
@@ -165,6 +177,12 @@
 </head>
 <body>
 <div id="editor-container"></div>
+
+<!-- Hidden textareas used as a shared-memory IPC channel between Java and JS.
+     Java writes JSON into these via WebEngine.executeScript / DOM manipulation;
+     the JS poller below reads and clears them on a 50ms interval.
+     Using textareas (rather than custom DOM nodes) avoids serialization issues
+     with direct JSObject bridging across threads. -->
 <textarea id="deltaComm" style="display:none"></textarea>
 <textarea id="incomingComm" style="display:none"></textarea>
 <textarea id="cursorComm" style="display:none"></textarea>
@@ -189,11 +207,11 @@
     var quill = new Quill('#editor-container', {
         theme: 'snow',
         modules: {
-            toolbar: false,
+            toolbar: false,         //we build our own toolbar in Java/JavaFX
             history: {
-                delay: 1,
+                delay: 1,           //group changes with a 1ms gap so each keystroke is its own undo step
                 maxStack: 1000,
-                userOnly: true
+                userOnly: true      //only user-sourced changes go on the undo stack, not programmatic 'api' ones
             }
         },
         placeholder: null
@@ -201,7 +219,9 @@
 
     window.quillEditor = quill;
 
-    // --- CACHING ADDITIONS ---
+    //cache the plain text so Java can read it without calling quill.getText() every time
+    // Keep a plain-text snapshot so Java can read document text without a
+    // round-trip through quill.getText() on every keystroke.
     window.cachedDocumentText = quill.getText();
     quill.on('text-change', function() {
         window.cachedDocumentText = quill.getText();
@@ -210,8 +230,11 @@
     window.getCachedDocumentText = function() {
         return window.cachedDocumentText;
     };
-    // -------------------------
 
+
+    // Quill's size/font/align attributors only accept values on their whitelist.
+    // We register style-based attributors (rather than class-based) so the format
+    // gets written as inline CSS, which survives copy-paste to external apps.
     var Size = Quill.import('attributors/style/size');
     Size.whitelist = [
         '8px', '9px', '10px', '11px', '12px', '13px', '14px', '15px', '16px',
@@ -249,6 +272,8 @@
     Quill.register(List, true);
     Quill.register(ListItem, true);
 
+    //functions Java calls directly via WebEngine.executeScript()
+
     window.getEditorContentForWord = function() {
         const delta = quill.getContents();
         return JSON.stringify(delta);
@@ -277,6 +302,7 @@
         window.cachedDocumentText = ""; // Clear cache
     };
 
+    //quill always has a trailing newline, so length === 1 means truly empty
     window.hasChanges = function() {
         return quill.getLength() > 1;
     };
@@ -285,7 +311,10 @@
         return quill.getBounds(index);
     };
 
-    // ── Remote cursor overlay ────────────────────────────────────
+    //remote cursor overlay - draws colored carets + name labels for each collaborator
+    // Renders a colored caret + username label at another user's cursor position.
+    // All DOM for cursors lives in a separate layer div so it doesn't interfere
+    // with Quill's own contenteditable DOM.
     (function() {
         var container = document.getElementById('editor-container');
         container.style.position = 'relative';
@@ -302,6 +331,7 @@
             '#8e44ad','#d35400','#16a085','#2471a3','#cb4335'
         ];
         var userColorMap = {};
+        //hash the username to a stable palette index so the same user always gets the same color
         function colorFor(username) {
             if (!userColorMap[username]) {
                 var h = 0;
@@ -339,6 +369,7 @@
                 c.caret.style.left   = b.left + 'px';
                 c.caret.style.top    = b.top + 'px';
                 c.caret.style.height = b.height + 'px';
+                //flip label above the caret when there's room; otherwise show it below
                 var labelTop = b.top > 22 ? b.top - 22 : b.top + b.height + 2;
                 c.label.style.left = b.left + 'px';
                 c.label.style.top  = labelTop + 'px';
@@ -358,16 +389,16 @@
             Object.keys(cursors).forEach(function(u) { window.removeRemoteCursor(u); });
         };
     })();
-    // ────────────────────────────────────────────────────────────
 
-    // ── Link click → open in system browser ─────────────────────
+
+    //link clicks - open in system browser instead of navigating the WebView
     // Use CAPTURE phase (3rd arg = true) so we intercept before the WebView
     // processes the <a> click and navigates internally.
     // Java listens to document.title; "OPEN_URL:<url>" triggers Desktop.browse().
     // Link clicks are intercepted in Java via loadWorker SCHEDULED state.
     // No JS handler needed here.
 
-    // ── Auto-link: space or Enter after a URL ────────────────────
+    //auto-link: if the word before the cursor looks like a URL, wrap it in a link
     // If the word just before the cursor looks like a URL, wrap it in a link.
     var URL_RE = /^(https?:\/\/|www\.)\S+/;
     quill.root.addEventListener('keydown', function(e) {
@@ -381,12 +412,15 @@
         if (!URL_RE.test(word)) return;
         var url   = word.startsWith('www.') ? 'https://' + word : word;
         var start = sel.index - word.length;
+        //defer to the next tick so the triggering character (space/enter) has been inserted first
         setTimeout(function() {
             quill.formatText(start, word.length, 'link', url, 'user');
         }, 0);
     });
-    // ────────────────────────────────────────────────────────────
 
+
+    // Backspace on an empty list item removes the list format instead of
+    // merging with the previous line, which matches Word/Docs behavior.
     quill.root.addEventListener('keydown', function(e) {
         const selection = quill.getSelection();
         if (!selection) {
@@ -404,6 +438,7 @@
                 return;
             }
 
+            //find the start of the current line by scanning backward for a newline
             let lineStart = 0;
             for (let i = index - 1; i >= 0; i--) {
                 if (quill.getText(i, 1) === '\n') {
@@ -423,12 +458,15 @@
         }
     });
 
+    // JavaFX WebView sometimes steals focus from the editor (e.g. when the
+    // toolbar is clicked). Re-focus immediately so keyboard input isn't lost.
     quill.root.addEventListener('blur', function() {
         setTimeout(function() {
             quill.focus();
         }, 10);
     });
 
+    //initial focus so the user can start typing without clicking first
     setTimeout(function() {
         quill.focus();
     }, 200);
@@ -442,12 +480,15 @@
         }
     });
 
-    // Poll for incoming deltas/full-content written by Java via the DOM
+    // Poll for incoming deltas/full-content written by Java via the DOM.
+    // Java batches operations as a JSON array into #incomingComm; we drain it
+    // every 50ms. This avoids race conditions from direct JSObject calls on the
+    // JavaFX application thread while Quill is mid-render.
     setInterval(function() {
         var el = document.getElementById('incomingComm');
         var v = el.value || '[]';
         if (v === '[]') return;
-        el.value = '[]';
+        el.value = '[]';     //clear before processing so Java can write again immediately
         var msgs = JSON.parse(v);
         for (var i = 0; i < msgs.length; i++) {
             var msg = msgs[i];
