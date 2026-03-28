@@ -144,7 +144,7 @@ Outgoing user deltas are collected in a hidden `<textarea id="deltaComm">` polle
 | Layer | Technology |
 |---|---|
 | Desktop UI | JavaFX 22.0.2 |
-| Build | Maven (Java 25) |
+| Build | Maven (Java 22) |
 | Rich text editor | Quill.js v1.x (bundled) |
 | Web integration | JavaFX WebView / WebEngine |
 | Real-time sync | Java-WebSocket 1.5.4 |
@@ -157,10 +157,20 @@ Outgoing user deltas are collected in a hidden `<textarea id="deltaComm">` polle
 
 ---
 
+## Download
+
+A pre-built Windows release is available — no Java installation required.
+
+1. Go to the [Releases](https://github.com/KoleoshoNifemi/DocuBridge-/releases) page
+2. Download `DocuBridge.zip` from the latest release
+3. Extract the ZIP and run `DocuBridge.exe`
+
+---
+
 ## Getting Started
 
 ### Prerequisites
-- Java 25+
+- Java 22+
 - Maven 3.8+
 - A `config.properties` file in `DocuBridge/` (not committed - see below)
 
