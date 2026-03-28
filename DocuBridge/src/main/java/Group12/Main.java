@@ -28,12 +28,20 @@ public class Main extends Application {
     public void start(Stage stage) {
         primaryStage = stage;
 
-        //load config.properties from the working directory - db URL and Azure keys live here
+        //load config.properties - check next to the JAR first (packaged EXE), then fall back to working directory (Maven/IDE)
         java.util.Properties props = new java.util.Properties();
-        try (java.io.FileInputStream fis = new java.io.FileInputStream("config.properties")) {
+        java.io.File configFile = null;
+        try {
+            java.net.URL codeSource = Main.class.getProtectionDomain().getCodeSource().getLocation();
+            java.io.File jarDir = new java.io.File(codeSource.toURI()).getParentFile();
+            java.io.File candidate = new java.io.File(jarDir, "config.properties");
+            if (candidate.exists()) configFile = candidate;
+        } catch (Exception ignored) {}
+        if (configFile == null) configFile = new java.io.File("config.properties");
+        try (java.io.FileInputStream fis = new java.io.FileInputStream(configFile)) {
             props.load(fis);
         } catch (java.io.IOException ex) {
-            throw new RuntimeException("config.properties not found. Create it with db.url=<your connection string>", ex);
+            throw new RuntimeException("config.properties not found. Expected at: " + configFile.getAbsolutePath(), ex);
         }
         String connectionUrl = props.getProperty("db.url");
 
