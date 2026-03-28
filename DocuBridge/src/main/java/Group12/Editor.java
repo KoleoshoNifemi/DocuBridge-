@@ -69,6 +69,11 @@ public class Editor {
 
         quill.getLoadWorker().stateProperty().addListener((obs, old, newState) -> {
             if (newState == javafx.concurrent.Worker.State.SUCCEEDED) {
+                //Set background color of webView same as our window
+                quill.executeScript(
+                        "document.body.style.backgroundColor = '#f1f3f4';" +
+                                "document.documentElement.style.backgroundColor = '#f1f3f4';"
+                );
                 //page finished loading - start polling until Quill's JS object is ready
                 waitForQuillReady();
             } else if (newState == javafx.concurrent.Worker.State.SCHEDULED) {
@@ -85,7 +90,8 @@ public class Editor {
         webView.setPrefHeight(800);
         //cap width to letter-page width (8.5 inches * screen DPI)
         webView.setMaxWidth(8.5 * dpi);
-        webView.setMinHeight(600);
+        //set min height to letter-page height (11 inches * screen DPI)
+        webView.setMinHeight(11 * dpi);
     }
 
     //Quill initializes asynchronously, so poll every 100ms until window.quill exists
