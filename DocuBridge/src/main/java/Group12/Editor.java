@@ -90,8 +90,8 @@ public class Editor {
         webView.setPrefHeight(800);
         //cap width to letter-page width (8.5 inches * screen DPI)
         webView.setMaxWidth(8.5 * dpi);
-        //set min height to letter-page height (11 inches * screen DPI)
-        webView.setMinHeight(11 * dpi);
+        //set min height to 600
+        webView.setMinHeight(600);
     }
 
     //Quill initializes asynchronously, so poll every 100ms until window.quill exists
